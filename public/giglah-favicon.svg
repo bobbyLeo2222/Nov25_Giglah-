@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Giglah! favicon">
+  <defs>
+    <linearGradient id="giglah-g" x1="8" x2="56" y1="8" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb347"/>
+      <stop offset=".5" stop-color="#ff4f81"/>
+      <stop offset="1" stop-color="#6b5bff"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#giglah-g)"/>
+  <path fill="#fff" d="M19 15.5c-2 0-3.5 1.6-3.5 3.5v17.4c-2.1-.8-4.5-1.1-6.3-.3C6.7 37.2 6 38.7 6 40c0 1.4.8 2.8 2.3 3.6 2.7 1.5 6.2.9 8.2-1.4.8-.9 1.3-2.3 1.3-3.7V22.5l17.1 1.9v11.6c-2.4-1-5.5-1-7.3.5-1 .9-1.6 2.1-1.6 3.4 0 1.3.6 2.5 1.6 3.3 2.2 1.8 6.1 1.6 8.5-.5.8-.7 1.4-1.7 1.7-2.8.2-.6.2-1.2.2-1.8V20.5c0-2.7-2.1-5-4.8-5.3l-23.3-2.6-.1-.1z"/>
+  <path fill="#0e0a1f" d="M43 15.8c-.9 0-1.6.7-1.6 1.5v15c0 1.2.7 2.3 1.7 2.9 2.5 1.3 5.9.9 7.8-1.3.8-.9 1.3-2 1.3-3.2V26c0-.9-.7-1.5-1.6-1.5s-1.6.7-1.6 1.5v4.7c0 .4-.2.8-.5 1.1-.7.8-2 .9-2.9.4-.4-.2-.5-.6-.5-1v-14c0-.9-.7-1.5-1.6-1.5z"/>
+  <circle cx="15.5" cy="15.5" r="3" fill="#0e0a1f"/>
+</svg>
