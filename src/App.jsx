@@ -15,6 +15,9 @@ import GigCard from '@/frontend/components/GigCard'
 import RatingStars from '@/frontend/components/RatingStars'
 import DashboardView from '@/frontend/views/DashboardView'
 import ChatView from '@/frontend/views/ChatView'
+import SellerApplicationView from '@/frontend/views/SellerApplicationView'
+import SellerProfileView from '@/frontend/views/SellerProfileView'
+import SellerGigCreateView from '@/frontend/views/SellerGigCreateView'
 import {
   buildSellerId,
   defaultAvatar,
@@ -313,6 +316,14 @@ function App() {
   const handleOpenSellerProfile = (sellerId, sellerName = '') => {
     if (!sellerId) return
     ensureSellerProfile(sellerId, sellerName)
+    setSelectedSellerId(sellerId)
+    setView('seller-profile')
+  }
+
+  const handleOpenMyProfile = () => {
+    if (!user) return
+    const sellerId = userSellerId || buildSellerId(user.email || user.name || '')
+    ensureSellerProfile(sellerId, user.name || 'Member')
     setSelectedSellerId(sellerId)
     setView('seller-profile')
   }
@@ -885,6 +896,7 @@ const openSignupModal = () => {
         onSignup={openSignupModal}
         onChat={() => setView('chat')}
         onSellerTools={() => setView('seller')}
+        onProfile={handleOpenMyProfile}
         onLogout={handleLogout}
       />
 
@@ -945,819 +957,67 @@ const openSignupModal = () => {
         )}
 
         {view === 'seller-profile' && (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            {!selectedSeller ? (
-              <div className="space-y-3">
-                <p className="text-lg font-semibold text-slate-900">Seller not found</p>
-                <p className="text-sm text-slate-500">
-                  Pick a seller from the marketplace to view their profile and reviews.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
-                      Seller profile
-                    </p>
-                    <h2 className="text-2xl font-semibold text-slate-900">{selectedSeller.name}</h2>
-                    <p className="text-sm text-slate-600">{selectedSeller.headline}</p>
-                    <p className="text-sm text-slate-500">{selectedSeller.location}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      className="bg-purple-600 text-white hover:bg-purple-500"
-                      onClick={() =>
-                        handleOpenChatFromGig(
-                          sellerPortfolio[0] || {
-                            id: `GL-${selectedSeller.id}`,
-                            title: selectedSeller.headline,
-                            seller: selectedSeller.name,
-                            sellerId: selectedSeller.id,
-                          },
-                        )
-                      }
-                    >
-                      Message seller
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-4 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
-                      <img
-                        src={selectedSeller.avatar}
-                        alt={selectedSeller.name}
-                        className="h-16 w-16 rounded-2xl object-cover"
-                      />
-                      <div className="space-y-2">
-                        <p className="text-sm text-slate-600">{selectedSeller.about}</p>
-                        <div className="flex flex-wrap gap-2 text-xs">
-                          <span className="rounded-full bg-purple-100 px-3 py-1 font-semibold text-purple-700">
-                            {selectedSeller.availability}
-                          </span>
-                          {selectedSeller.languages.map((language) => (
-                            <span
-                              key={language}
-                              className="rounded-full bg-white px-3 py-1 font-semibold text-slate-600"
-                            >
-                              {language}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                      <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
-                        <p className="text-xs font-semibold text-slate-500">Rating</p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <RatingStars rating={sellerRatingSummary.average} />
-                          <span className="text-base font-semibold text-slate-900">
-                            {sellerRatingSummary.average
-                              ? `${sellerRatingSummary.average}/5`
-                              : 'No reviews'}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          {sellerRatingSummary.count} review{sellerRatingSummary.count === 1 ? '' : 's'}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
-                        <p className="text-xs font-semibold text-slate-500">Projects</p>
-                        <p className="text-2xl font-semibold text-slate-900">
-                          {selectedSeller.stats?.projects ?? 0}
-                        </p>
-                        <p className="text-xs text-slate-500">Completed engagements</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
-                        <p className="text-xs font-semibold text-slate-500">Response time</p>
-                        <p className="text-2xl font-semibold text-slate-900">
-                          {selectedSeller.stats?.response || '—'}
-                        </p>
-                        <p className="text-xs text-slate-500">Avg first reply</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
-                        <p className="text-xs font-semibold text-slate-500">Repeat clients</p>
-                        <p className="text-2xl font-semibold text-slate-900">
-                          {selectedSeller.stats?.repeat || '—'}
-                        </p>
-                        <p className="text-xs text-slate-500">Based on past projects</p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-slate-900">Specialties</p>
-                        <span className="text-xs text-slate-500">What this seller focuses on</span>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {selectedSeller.specialties.map((item) => (
-                          <span
-                            key={item}
-                            className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700"
-                          >
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="mt-4">
-                        <p className="text-sm font-semibold text-slate-900">Languages</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {selectedSeller.languages.map((language) => (
-                            <span
-                              key={language}
-                              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
-                            >
-                              {language}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="overflow-hidden rounded-3xl border border-slate-100 bg-gradient-to-br from-purple-100 via-slate-50 to-white shadow-inner">
-                    <div className="h-60 w-full overflow-hidden">
-                      <img
-                        src={selectedSeller.heroImage}
-                        alt={`${selectedSeller.name} portfolio`}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <div className="space-y-3 px-5 py-4">
-                      <p className="text-sm font-semibold text-slate-900">Booking summary</p>
-                      <p className="text-sm text-slate-600">
-                        {selectedSeller.availability || 'Share when you are free this month.'}
-                      </p>
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        {sellerPortfolio.slice(0, 3).map((gig) => (
-                          <span
-                            key={gig.id}
-                            className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700"
-                          >
-                            {gig.title}
-                          </span>
-                        ))}
-                        {sellerPortfolio.length === 0 && (
-                          <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-500">
-                            No gigs listed yet
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedSeller.socials?.website && (
-                          <a
-                            href={selectedSeller.socials.website}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-purple-200 hover:text-purple-700"
-                          >
-                            Website
-                          </a>
-                        )}
-                        {selectedSeller.socials?.instagram && (
-                          <a
-                            href={selectedSeller.socials.instagram}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-purple-200 hover:text-purple-700"
-                          >
-                            Instagram
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
-                        Services
-                      </p>
-                      <p className="text-lg font-semibold text-slate-900">Gigs by {selectedSeller.name}</p>
-                    </div>
-                    <span className="text-xs text-slate-500">
-                      {sellerPortfolio.length} listing{sellerPortfolio.length === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {sellerPortfolio.length === 0 && (
-                      <p className="text-sm text-slate-500">
-                        This seller has not published gigs yet. Message them to request a custom offer.
-                      </p>
-                    )}
-                    {sellerPortfolio.map((gig) => (
-                      <div
-                        key={gig.id}
-                        className="flex h-full flex-col rounded-2xl border border-white bg-white px-4 py-4 shadow-sm"
-                      >
-                        <p className="text-sm font-semibold text-slate-900">{gig.title}</p>
-                        <p className="text-xs text-slate-500">{gig.category}</p>
-                        <p className="mt-2 text-sm text-slate-600">
-                          {gig.description || 'Custom engagement available on request.'}
-                        </p>
-                        <div className="mt-auto flex items-center justify-between pt-3">
-                          <span className="text-base font-semibold text-slate-900">
-                            {gig.price ? formatter.format(gig.price) : 'Ask for quote'}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                            onClick={() => handleOpenChatFromGig(gig)}
-                          >
-                            Enquire
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-                  <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
-                          Reviews
-                        </p>
-                        <div className="flex items-center gap-3">
-                          <RatingStars rating={sellerRatingSummary.average} />
-                          <div>
-                            <p className="text-lg font-semibold text-slate-900">
-                              {sellerRatingSummary.average
-                                ? `${sellerRatingSummary.average} / 5`
-                                : 'No reviews yet'}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {sellerRatingSummary.count} review{sellerRatingSummary.count === 1 ? '' : 's'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                        onClick={() => setView('dashboard')}
-                      >
-                        Browse other sellers
-                      </Button>
-                    </div>
-
-                    <div className="mt-4 space-y-3">
-                      {sellerReviewList.length === 0 && (
-                        <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
-                          No reviews yet. Be the first buyer to share feedback for {selectedSeller.name}.
-                        </p>
-                      )}
-                      {sellerReviewList.map((review) => (
-                        <div
-                          key={review.id}
-                          className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {review.reviewerName}
-                              </p>
-                              {review.project && (
-                                <p className="text-xs text-slate-500">{review.project}</p>
-                              )}
-                            </div>
-                            <span className="text-xs text-slate-400">
-                              {review.createdAt ? timeAgo(review.createdAt) : ''}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex items-center gap-2">
-                            <RatingStars rating={review.rating} />
-                            <span className="text-sm font-semibold text-slate-900">
-                              {review.rating}/5
-                            </span>
-                          </div>
-                          <p className="mt-2 text-sm text-slate-700">{review.comment}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <form
-                    className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm"
-                    onSubmit={handleSubmitReview}
-                  >
-                    <p className="text-sm font-semibold text-slate-900">Leave a review</p>
-                    <p className="text-xs text-slate-500">
-                      Share a rating and note to help other buyers choose confidently.
-                    </p>
-                    <div className="mt-3 space-y-3">
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-slate-700">Rating</label>
-                        <select
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                          value={reviewDraft.rating}
-                          onChange={handleReviewDraftChange('rating')}
-                        >
-                          {[5, 4, 3, 2, 1].map((rating) => (
-                            <option key={rating} value={rating}>
-                              {rating} star{rating === 1 ? '' : 's'}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-slate-700">Project or gig</label>
-                        <input
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                          placeholder="e.g., AI chatbot rollout"
-                          value={reviewDraft.project}
-                          onChange={handleReviewDraftChange('project')}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-slate-700">Review</label>
-                        <textarea
-                          rows={4}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                          placeholder="What went well? How was the communication and delivery?"
-                          value={reviewDraft.text}
-                          onChange={handleReviewDraftChange('text')}
-                        />
-                      </div>
-                      <Button
-                        type="submit"
-                        className="w-full bg-purple-600 text-white hover:bg-purple-500"
-                      >
-                        Post review
-                      </Button>
-                      {!user && (
-                        <p className="text-xs font-semibold text-amber-600">
-                          Log in to post a review.
-                        </p>
-                      )}
-                      {user?.isSeller && (
-                        <p className="text-xs font-semibold text-amber-600">
-                          Switch to buyer mode to review another seller.
-                        </p>
-                      )}
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
-          </section>
+          <SellerProfileView
+            selectedSeller={selectedSeller}
+            sellerRatingSummary={sellerRatingSummary}
+            sellerReviewList={sellerReviewList}
+            reviewDraft={reviewDraft}
+            sellerPortfolio={sellerPortfolio}
+            formatter={formatter}
+            timeAgo={timeAgo}
+            user={user}
+            onBackToDashboard={() => setView('dashboard')}
+            onSubmitReview={handleSubmitReview}
+            onReviewDraftChange={handleReviewDraftChange}
+            onOpenChatFromGig={handleOpenChatFromGig}
+          />
         )}
 
 
         {view === 'seller' && (
-          <section className="w-full rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-50 text-purple-600">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 7h18M3 12h10m-7 5h14"
-                  />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Seller hub</p>
-                <h2 className="text-2xl font-semibold text-slate-900">List your gig for Singapore buyers</h2>
-                <p className="text-sm text-slate-500">
-                  Use the same login. Complete a quick profile, then submit your listing.
-                </p>
-              </div>
-              {user?.isSeller && (
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {userGigCount || 0} live gig{userGigCount === 1 ? '' : 's'}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                    onClick={() => handleOpenSellerProfile(userSellerId, user.name)}
-                  >
-                    Preview profile
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            {!user && (
-              <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                <p>Sign in before activating seller mode.</p>
-                <div className="mt-3 flex flex-wrap gap-3">
-                  <Button
-                    type="button"
-                    className="bg-purple-600 text-white hover:bg-purple-500"
-                    onClick={openLoginModal}
-                  >
-                    Log in
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                    onClick={openSignupModal}
-                  >
-                    Create account
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {user && !user.isSeller && (
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 px-5 py-4 text-sm text-slate-700">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Ready to earn?
-                  </p>
-                  <p className="text-base font-semibold text-slate-900">
-                    Switch this account to seller mode.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full border border-purple-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-purple-700 hover:bg-purple-50"
-                  onClick={startSellerApplication}
-                >
-                  Start application
-                </Button>
-              </div>
-            )}
-
-            {user?.isSeller && (
-              <div className="mt-6 space-y-6">
-                <form className="space-y-4" onSubmit={handleCreateGig}>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <input
-                      className={inputClasses}
-                      placeholder="Gig title"
-                      value={newGig.title}
-                      onChange={handleGigChange('title')}
-                    />
-                    <input
-                      className={inputClasses}
-                      placeholder="Category"
-                      value={newGig.category}
-                      onChange={handleGigChange('category')}
-                    />
-                  </div>
-                  <input
-                    type="number"
-                    className={inputClasses}
-                    placeholder="Price (SGD)"
-                    value={newGig.price}
-                    onChange={handleGigChange('price')}
-                  />
-                  <textarea
-                    rows={4}
-                    className={`${inputClasses} resize-none`}
-                    placeholder="Describe your deliverables and timeline."
-                    value={newGig.description}
-                    onChange={handleGigChange('description')}
-                  />
-                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">Photos & videos</p>
-                        <p className="text-xs text-slate-500">
-                          Upload images or short clips (jpg, png, webp, mp4, mov). Up to 10 files.
-                        </p>
-                      </div>
-                      <label className="inline-flex items-center justify-center rounded-full bg-purple-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-purple-500">
-                        <input
-                          type="file"
-                          accept="image/*,video/*"
-                          multiple
-                          className="hidden"
-                          onChange={handleGigFiles}
-                        />
-                        Upload
-                      </label>
-                    </div>
-                    {isUploadingMedia && (
-                      <p className="text-xs font-semibold text-slate-600">Uploading media…</p>
-                    )}
-                    {gigMedia.length > 0 && (
-                      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                        {gigMedia.map((item) => (
-                          <div
-                            key={item.id}
-                            className="group relative overflow-hidden rounded-xl border border-white/60 bg-white"
-                          >
-                            {item.type === 'video' ? (
-                              <video
-                                src={item.url}
-                                className="h-36 w-full object-cover"
-                                controls
-                                muted
-                                playsInline
-                              />
-                            ) : (
-                              <img
-                                src={item.url}
-                                alt={item.name}
-                                className="h-36 w-full object-cover"
-                              />
-                            )}
-                            <div className="flex items-center justify-between px-3 py-2">
-                              <span className="text-[11px] font-semibold uppercase text-slate-600">
-                                {item.type}
-                              </span>
-                              <button
-                                type="button"
-                                className="text-xs font-semibold text-rose-600 opacity-0 transition group-hover:opacity-100"
-                                onClick={() => handleRemoveGigMedia(item.id)}
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <Button type="submit" className="w-full bg-purple-600 text-white hover:bg-purple-500">
-                    Submit gig
-                  </Button>
-                </form>
-
-                <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-sm text-slate-600">
-                  <p className="font-semibold text-slate-900">Your gigs</p>
-                  <div className="mt-3 space-y-3">
-                    {myGigs.length === 0 && (
-                      <p>No gigs yet. Publish your first listing above.</p>
-                    )}
-                    {myGigs.map((gig) => (
-                      <div
-                        key={gig.id}
-                        className="flex flex-wrap items-center justify-between rounded-xl border border-white/60 bg-white px-3 py-2"
-                      >
-                        <div>
-                          <p className="font-semibold text-slate-900">{gig.title}</p>
-                        </div>
-                        <span className="text-sm font-semibold text-slate-900">
-                          {formatter.format(gig.price)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </section>
+          <SellerGigCreateView
+            user={user}
+            userGigCount={userGigCount}
+            userSellerId={userSellerId}
+            inputClasses={inputClasses}
+            newGig={newGig}
+            gigMedia={gigMedia}
+            isUploadingMedia={isUploadingMedia}
+            myGigs={myGigs}
+            formatter={formatter}
+            onOpenSellerProfile={handleOpenSellerProfile}
+            onOpenLogin={openLoginModal}
+            onOpenSignup={openSignupModal}
+            onStartApplication={startSellerApplication}
+            onGigChange={handleGigChange}
+            onGigFiles={handleGigFiles}
+            onRemoveGigMedia={handleRemoveGigMedia}
+            onCreateGig={handleCreateGig}
+          />
         )}
 
         {view === 'seller-apply' && (
-          <section className="w-full rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
-                  Become a seller
-                </p>
-                <h2 className="text-2xl font-semibold text-slate-900">Complete your profile</h2>
-                <p className="text-sm text-slate-500">
-                  We review this info before unlocking seller tools for your account.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                className="text-sm text-slate-500 hover:text-slate-900"
-                onClick={cancelSellerApplication}
-              >
-                Back to hub
-              </Button>
-            </div>
-
-            {user ? (
-              <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 sm:flex sm:items-center sm:gap-6">
-                <p>
-                  <span className="font-semibold text-slate-900">Username:</span>{' '}
-                  {user.email.split('@')[0]}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-900">Email:</span> {user.email}
-                </p>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-600">
-                Please sign in to submit your seller profile.
-              </div>
-            )}
-
-            <form className="mt-6 space-y-5" onSubmit={handleSellerUpgrade}>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Full Name (Private)</label>
-                <input
-                  className={sellerInputClasses}
-                  placeholder="e.g., Tan Wei Ming"
-                  value={sellerForm.fullName}
-                  onChange={handleSellerFormChange('fullName')}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Display Name</label>
-                <input
-                  className={sellerInputClasses}
-                  placeholder="e.g., Wei — Product Photographer"
-                  value={sellerForm.displayName}
-                  onChange={handleSellerFormChange('displayName')}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Profile Picture</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleSellerFormChange('profilePicture')}
-                  className="block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 file:mr-3 file:rounded-full file:border-0 file:bg-purple-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-purple-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                />
-                {sellerForm.profilePicture && (
-                  <p className="text-xs text-slate-500">
-                    Selected: {sellerForm.profilePicture?.name ?? '1 file'}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Description</label>
-                <textarea
-                  rows={4}
-                  className={`${sellerInputClasses} resize-none`}
-                  placeholder="Share your experience, notable projects, and what you specialise in."
-                  value={sellerForm.description}
-                  onChange={handleSellerFormChange('description')}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Personal Website</label>
-                <input
-                  type="text"
-                  inputMode="url"
-                  autoComplete="url"
-                  className={sellerInputClasses}
-                  placeholder="https:// or www.yourdomain.com"
-                  value={sellerForm.website}
-                  onChange={handleSellerFormChange('website')}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Instagram</label>
-                <input
-                  type="text"
-                  inputMode="url"
-                  autoComplete="url"
-                  className={sellerInputClasses}
-                  placeholder="https://instagram.com/yourusername"
-                  value={sellerForm.instagram}
-                  onChange={handleSellerFormChange('instagram')}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Other Social Media</label>
-                <input
-                  type="text"
-                  inputMode="url"
-                  autoComplete="url"
-                  className={sellerInputClasses}
-                  placeholder="https://linkedin.com/in/yourname"
-                  value={sellerForm.otherSocial}
-                  onChange={handleSellerFormChange('otherSocial')}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Phone Number</label>
-                <input
-                  type="tel"
-                  className={sellerInputClasses}
-                  placeholder="+65 9123 4567"
-                  value={sellerForm.phone}
-                  onChange={handleSellerFormChange('phone')}
-                />
-              </div>
-              <div className="space-y-3">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <label className="text-sm font-semibold text-slate-700">Skills</label>
-                  <span className="text-xs text-slate-400">Add at least 1 skill, up to 5.</span>
-                </div>
-                <input
-                  className={sellerInputClasses}
-                  placeholder="e.g., Product Photography"
-                  value={sellerForm.skillInput}
-                  onChange={handleSellerFormChange('skillInput')}
-                />
-                <button
-                  type="button"
-                  className="h-11 rounded-full bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-500"
-                  onClick={handleAddSkill}
-                >
-                  Add Skill
-                </button>
-                {sellerForm.skills.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {sellerForm.skills.map((skill) => (
-                      <span
-                        key={skill}
-                        className="flex items-center gap-2 rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700"
-                      >
-                        {skill}
-                        <button
-                          type="button"
-                          className="text-purple-500 hover:text-purple-700"
-                          onClick={() => handleRemoveSkill(skill)}
-                          aria-label={`Remove ${skill}`}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="space-y-3">
-                <p className="text-base font-semibold text-slate-900">Languages and Competency Levels</p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <select
-                    className={sellerInputClasses}
-                    value={sellerForm.languageSelection}
-                    onChange={handleSellerFormChange('languageSelection')}
-                  >
-                    <option value="">Select Language</option>
-                    {languageOptions.map((language) => (
-                      <option key={language} value={language}>
-                        {language}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className={sellerInputClasses}
-                    value={sellerForm.levelSelection}
-                    onChange={handleSellerFormChange('levelSelection')}
-                  >
-                    <option value="">Select Level</option>
-                    {competencyLevels.map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  type="button"
-                  className="h-11 rounded-full bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-500"
-                  onClick={handleAddLanguage}
-                >
-                  Add Language
-                </button>
-                {sellerForm.languages.length > 0 && (
-                  <ul className="space-y-2">
-                    {sellerForm.languages.map((entry) => (
-                      <li
-                        key={entry.language}
-                        className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm text-slate-600"
-                      >
-                        <div>
-                          <p className="font-semibold text-slate-900">{entry.language}</p>
-                          <p className="text-xs text-slate-500">{entry.level}</p>
-                        </div>
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-rose-500"
-                          onClick={() => handleRemoveLanguage(entry.language)}
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <button
-                type="submit"
-                className="w-full rounded-full bg-purple-600 px-4 py-3 text-base font-semibold text-white shadow transition hover:bg-purple-500"
-              >
-                Submit
-              </button>
-            </form>
-            {sellerError && (
-              <p className="mt-4 text-sm font-semibold text-rose-600">{sellerError}</p>
-            )}
-          </section>
+          <SellerApplicationView
+            user={user}
+            sellerForm={sellerForm}
+            sellerError={sellerError}
+            sellerInputClasses={sellerInputClasses}
+            languageOptions={languageOptions}
+            competencyLevels={competencyLevels}
+            onCancel={cancelSellerApplication}
+            onSellerFormChange={handleSellerFormChange}
+            onAddSkill={handleAddSkill}
+            onRemoveSkill={handleRemoveSkill}
+            onAddLanguage={handleAddLanguage}
+            onRemoveLanguage={handleRemoveLanguage}
+            onSubmit={handleSellerUpgrade}
+            onClearProfilePicture={() =>
+              setSellerForm((prev) => ({
+                ...prev,
+                profilePicture: null,
+              }))
+            }
+          />
         )}
 
         {view === 'categories' && (
