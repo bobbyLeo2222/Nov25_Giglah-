@@ -3,186 +3,30 @@ import { Button } from '@/components/ui/button'
 import TopBar from '@/components/ui/TopBar'
 import {
   serviceCategories,
-  gigAccentClasses,
   languageOptions,
   competencyLevels,
   initialSellerForm,
   privacyPoints,
   termsPoints,
 } from '@/data/static'
+import LoginModal from '@/frontend/auth/LoginModal'
+import SignupModal from '@/frontend/auth/SignupModal'
+import GigCard from '@/frontend/components/GigCard'
+import RatingStars from '@/frontend/components/RatingStars'
+import DashboardView from '@/frontend/views/DashboardView'
+import ChatView from '@/frontend/views/ChatView'
+import {
+  buildSellerId,
+  defaultAvatar,
+  defaultHeroImage,
+  formatFileSize,
+  mapUserFromApi,
+  normalizeGig,
+  normalizeProfile,
+  normalizeReview,
+  timeAgo,
+} from '@/frontend/helpers'
 import { fetchJSON, getStoredToken, setStoredToken } from '@/lib/api'
-
-const formatFileSize = (bytes) => {
-  if (!bytes && bytes !== 0) return '0 KB'
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1)
-  const sized = bytes / Math.pow(1024, index)
-  return `${sized.toFixed(index === 0 ? 0 : 1)} ${sizes[index]}`
-}
-
-const timeAgo = (timestamp) => {
-  const parsed = timestamp ? new Date(timestamp).getTime() : 0
-  const diff = Date.now() - parsed
-  if (!Number.isFinite(diff) || diff <= 0) return 'Just now'
-  const minutes = Math.floor(diff / (1000 * 60))
-  if (minutes < 1) return 'Just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
-
-const formatChatTime = (timestamp) =>
-  new Intl.DateTimeFormat('en-SG', { hour: 'numeric', minute: '2-digit' }).format(
-    new Date(timestamp),
-  )
-
-const renderStars = (rating = 0) => (
-  <div className="flex items-center gap-1">
-    {Array.from({ length: 5 }).map((_, index) => {
-      const level = rating - index
-      const filled = level >= 1
-      const faded = level > 0 && level < 1
-      return (
-        <span
-          key={index}
-          className={filled ? 'text-amber-500' : faded ? 'text-amber-300' : 'text-slate-300'}
-        >
-          ★
-        </span>
-      )
-    })}
-  </div>
-)
-
-const buildSellerId = (value) =>
-  (value || 'seller').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') ||
-  'seller'
-
-const defaultAvatar =
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80'
-const defaultHeroImage =
-  'https://images.unsplash.com/photo-1483478550801-ceba5fe50e8e?auto=format&fit=crop&w=1200&q=80'
-
-const normalizeGigMedia = (media = []) => {
-  if (!Array.isArray(media)) return []
-  return media
-    .map((item) => {
-      if (!item) return null
-      if (typeof item === 'string') return { url: item, type: 'image', thumbnailUrl: '' }
-      if (!item.url) return null
-      const type = item.type === 'video' ? 'video' : 'image'
-      return {
-        url: item.url,
-        type,
-        thumbnailUrl: item.thumbnailUrl || '',
-      }
-    })
-    .filter(Boolean)
-}
-
-const normalizeGig = (gig) => ({
-  id: gig._id || gig.id,
-  title: gig.title,
-  seller: gig.sellerName || gig.seller || 'Seller',
-  sellerId: gig.sellerId || gig.sellerProfile?.sellerId || gig.sellerProfile?._id || '',
-  category: gig.category || '',
-  price: gig.price || 0,
-  status: gig.status || 'Published',
-  description: gig.description || '',
-  owner: gig.owner || null,
-  imageUrl: gig.imageUrl || '',
-  instagramUrl: gig.instagramUrl || '',
-  websiteUrl: gig.websiteUrl || '',
-  media: normalizeGigMedia(gig.media),
-})
-
-const normalizeProfile = (profile) => ({
-  id: profile.sellerId || profile._id,
-  name: profile.displayName || profile.user?.name || 'Seller',
-  headline: profile.headline || 'Independent seller',
-  about: profile.bio || 'Describe your expertise so buyers know what you do.',
-  location: profile.location || 'Location not set',
-  avatar: profile.imageUrl || defaultAvatar,
-  heroImage: profile.imageUrl || defaultHeroImage,
-  specialties: profile.skills || ['Custom engagements', 'Flexible timelines'],
-  languages: profile.languages || [],
-  stats: profile.stats || { projects: 0, response: '—', repeat: '—' },
-  socials: { website: profile.websiteUrl || '', instagram: profile.instagramUrl || '' },
-  availability: profile.availability || 'Available',
-})
-
-const normalizeReview = (review) => ({
-  id: review._id || review.id,
-  reviewerName: review.buyer?.name || review.reviewerName || 'Buyer',
-  rating: review.rating,
-  comment: review.text || review.comment,
-  project: review.project || 'Custom brief',
-  createdAt: review.createdAt ? new Date(review.createdAt).getTime() : Date.now(),
-})
-
-const mapUserFromApi = (apiUser) =>
-  apiUser ? { ...apiUser, isSeller: apiUser.role === 'seller' } : null
-
-function GlobeIcon({ className = '', ...props }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-      {...props}
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18" />
-      <path d="M12 3a15 15 0 0 0 0 18 15 15 0 0 0 0-18Z" />
-    </svg>
-  )
-}
-
-function InstagramIcon({ className = '', ...props }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-      {...props}
-    >
-      <rect x="4" y="4" width="16" height="16" rx="5" />
-      <path d="M12 9a3 3 0 1 0 3 3 3 3 0 0 0-3-3Z" />
-      <circle cx="17" cy="7" r="1" fill="currentColor" stroke="currentColor" />
-    </svg>
-  )
-}
-
-function ChatBubbleIcon({ className = '', ...props }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-      {...props}
-    >
-      <path d="M4 6.5A3.5 3.5 0 0 1 7.5 3h9A3.5 3.5 0 0 1 20 6.5V13a3.5 3.5 0 0 1-3.5 3.5H11l-4.5 4V6.5Z" />
-      <path d="M9 9h6M9 12h3" />
-    </svg>
-  )
-}
 
 function App() {
   const [view, setView] = useState('dashboard')
@@ -484,101 +328,6 @@ function App() {
       if (found) return found.icon
     }
     return '📌'
-  }
-
-  const renderGigCard = (gig, index) => {
-    const primaryImage =
-      gig.imageUrl || gig.media?.find((item) => item.type === 'image')?.url || ''
-    const primaryVideo =
-      !primaryImage && gig.media ? gig.media.find((item) => item.type === 'video') : null
-
-    return (
-      <article
-        key={gig.id}
-        className="group flex h-full flex-col rounded-2xl border border-slate-100 bg-white shadow-sm"
-      >
-        <div className="relative h-40 overflow-hidden rounded-2xl">
-          {primaryImage ? (
-            <img
-              src={primaryImage}
-              alt={gig.title}
-              loading="lazy"
-              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-            />
-          ) : primaryVideo ? (
-            <video
-              src={primaryVideo.url}
-              poster={primaryVideo.thumbnailUrl || undefined}
-              className="h-full w-full object-cover"
-              controls
-              muted
-              playsInline
-            />
-          ) : (
-            <div
-              className={`h-full w-full bg-gradient-to-br ${gigAccentClasses[index % gigAccentClasses.length]}`}
-            />
-          )}
-          <span className="absolute bottom-3 left-3 rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-slate-700 backdrop-blur">
-            {gig.category || 'General'}
-          </span>
-        </div>
-        <div className="flex flex-1 flex-col gap-3 px-4 py-4">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">{gig.title}</h3>
-            <button
-              type="button"
-              className="text-xs font-semibold text-slate-600 underline decoration-slate-300 decoration-2 underline-offset-[6px] transition hover:text-purple-700 hover:decoration-purple-400"
-              onClick={() => handleOpenSellerProfile(gig.sellerId || gig.owner || '', gig.seller)}
-            >
-              {gig.seller}
-            </button>
-          </div>
-          <p className="text-sm text-slate-500">
-            {gig.description || 'Set expectations for buyers with a concise overview.'}
-          </p>
-          <div className="mt-auto space-y-3">
-            <div className="text-sm text-slate-500">
-              <span className="text-base font-semibold text-slate-900">
-                {gig.price ? formatter.format(gig.price) : 'Pricing TBD'}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              {gig.websiteUrl && (
-                <a
-                  href={gig.websiteUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-purple-200 hover:text-purple-600"
-                  aria-label={`${gig.title} website`}
-                >
-                  <GlobeIcon className="h-4 w-4" />
-                </a>
-              )}
-              {gig.instagramUrl && (
-                <a
-                  href={gig.instagramUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-purple-200 hover:text-purple-600"
-                  aria-label={`${gig.title} Instagram`}
-                >
-                  <InstagramIcon className="h-4 w-4" />
-                </a>
-              )}
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-900 transition hover:border-purple-200 hover:text-purple-600"
-                onClick={() => handleOpenChatFromGig(gig)}
-                aria-label={`Chat with ${gig.seller}`}
-              >
-                <ChatBubbleIcon className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </article>
-    )
   }
 
   const handleSelectThread = (threadId) => {
@@ -1124,170 +873,11 @@ const openSignupModal = () => {
     }
   }
 
-  const renderLoginModal = () => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 backdrop-blur-sm">
-      <div className="relative w-full max-w-md rounded-[32px] border border-slate-100 bg-white px-8 py-10 shadow-2xl">
-        <button
-          type="button"
-          onClick={dismissModals}
-          className="absolute right-5 top-4 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-          aria-label="Close login modal"
-        >
-          ×
-        </button>
-        <div className="space-y-6">
-          <div>
-            <p className="text-2xl font-semibold text-slate-900">Login</p>
-          </div>
-          <form className="space-y-4" onSubmit={handleLogin}>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Email</label>
-              <input
-                type="email"
-                className={modalInputClasses}
-                placeholder="you@example.com"
-                value={forms.login.email}
-                onChange={handleFormChange('login', 'email')}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Password</label>
-              <div className="flex items-center rounded-full border border-slate-200 bg-white px-4">
-                <input
-                  type={showLoginPassword ? 'text' : 'password'}
-                  className="w-full border-none bg-transparent py-3 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                  placeholder="••••••••"
-                  value={forms.login.password}
-                  onChange={handleFormChange('login', 'password')}
-                />
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-slate-500"
-                  onClick={() => setShowLoginPassword((prev) => !prev)}
-                >
-                  {showLoginPassword ? 'HIDE' : 'SHOW'}
-                </button>
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={isAuthLoading}
-              className="w-full rounded-full bg-purple-600 px-4 py-3 text-base font-semibold text-white shadow transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              Continue
-            </button>
-          </form>
-          {formErrors.login && (
-            <p className="text-sm font-medium text-rose-500">{formErrors.login}</p>
-          )}
-          <div className="flex items-center justify-between text-sm text-slate-500">
-            <button
-              type="button"
-              className="font-semibold text-slate-700"
-              onClick={openSignupModal}
-            >
-              Create account
-            </button>
-            <button
-              type="button"
-              className="font-semibold text-slate-700"
-              onClick={handleForgotPassword}
-            >
-              Forgot password?
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
-  const renderSignupModal = () => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 backdrop-blur-sm">
-      <div className="relative w-full max-w-md rounded-[32px] border border-slate-100 bg-white px-8 py-10 shadow-2xl">
-        <button
-          type="button"
-          onClick={dismissModals}
-          className="absolute right-5 top-4 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-          aria-label="Close signup modal"
-        >
-          ×
-        </button>
-        <div className="space-y-6">
-          <div>
-            <p className="text-2xl font-semibold text-slate-900">Register</p>
-          </div>
-          <form className="space-y-4" onSubmit={handleSignup}>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Name</label>
-              <input
-                className={modalInputClasses}
-                placeholder="Your full name"
-                value={forms.signup.fullName}
-                onChange={handleFormChange('signup', 'fullName')}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Email</label>
-              <input
-                type="email"
-                className={modalInputClasses}
-                placeholder="you@example.com"
-                value={forms.signup.email}
-                onChange={handleFormChange('signup', 'email')}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Password</label>
-              <div className="flex items-center rounded-full border border-slate-200 bg-white px-4">
-                <input
-                  type={showSignupPassword ? 'text' : 'password'}
-                  className="w-full border-none bg-transparent py-3 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                  placeholder="At least 8 characters"
-                  value={forms.signup.password}
-                  onChange={handleFormChange('signup', 'password')}
-                />
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-slate-500"
-                  onClick={() => setShowSignupPassword((prev) => !prev)}
-                >
-                  {showSignupPassword ? 'HIDE' : 'SHOW'}
-                </button>
-              </div>
-              <p className="text-xs text-slate-400">
-                Use at least 8 characters with uppercase, lowercase, and a number.
-              </p>
-            </div>
-            <button
-              type="submit"
-              disabled={isAuthLoading}
-              className="w-full rounded-full bg-purple-600 px-4 py-3 text-base font-semibold text-white shadow transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              Continue
-            </button>
-          </form>
-          {formErrors.signup && (
-            <p className="text-sm font-medium text-rose-500">{formErrors.signup}</p>
-          )}
-          <div className="text-center text-sm text-slate-500">
-            <button
-              type="button"
-              className="font-semibold text-slate-700"
-              onClick={openLoginModal}
-            >
-              Back to login
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
   const isWorkspaceView = view === 'dashboard' || view === 'login' || view === 'signup'
   const currentYear = new Date().getFullYear()
 
   return (
-    <div className="min-h-screen bg-white text-slate-900">
+    <div className="min-h-screen bg-white text-slate-900 antialiased overflow-x-hidden">
       <TopBar
         user={user}
         onDashboard={() => setView('dashboard')}
@@ -1298,7 +888,7 @@ const openSignupModal = () => {
         onLogout={handleLogout}
       />
 
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {message && (
           <div className="rounded-2xl border border-purple-100 bg-purple-50/60 px-4 py-3 text-sm font-medium text-purple-800 shadow-sm">
             {message}
@@ -1316,385 +906,42 @@ const openSignupModal = () => {
         )}
 
         {isWorkspaceView && (
-          <>
-        <header className="rounded-3xl border border-purple-100 bg-white/90 p-6 shadow-sm">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-2xl font-semibold text-slate-900 md:text-3xl">
-              Find gigs and freelancers instantly.
-            </h1>
-          </div>
-
-          <div className="mt-5 flex flex-col gap-3 lg:flex-row">
-            <div className="flex flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-              <input
-                className="w-full border-none bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                placeholder="Search for categories, freelancers and gigs..."
-              />
-              <Button className="bg-purple-600 text-white hover:bg-purple-500">Search</Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="font-semibold text-slate-700">Try:</span>
-              <button
-                type="button"
-                className="rounded-full border border-slate-200 px-3 py-1 hover:border-purple-200 hover:text-purple-600"
-              >
-                Digital Marketing
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-slate-200 px-3 py-1 hover:border-purple-200 hover:text-purple-600"
-              >
-                AI Chatbots
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-slate-200 px-3 py-1 hover:border-purple-200 hover:text-purple-600"
-              >
-                Tuition Teachers
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="space-y-6">
-          <section className="-mx-4 md:-mx-8 lg:-mx-12">
-            <div className="relative overflow-hidden rounded-3xl bg-slate-900 text-white shadow-xl">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(168,85,247,0.25),transparent_35%),radial-gradient(circle_at_80%_30%,rgba(14,165,233,0.2),transparent_35%),radial-gradient(circle_at_50%_80%,rgba(248,113,113,0.2),transparent_35%)]" />
-              <div className="relative flex flex-col gap-8 p-6 sm:p-8 lg:p-10">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-purple-200">
-                      Services
-                    </p>
-                    <h2 className="text-2xl font-semibold text-white sm:text-3xl">
-                      Digital & physical offers across Singapore
-                    </h2>
-                    <p className="text-sm text-slate-200">
-                      Swipe or use the arrows to cycle through every category we cover.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:border-white/60 hover:bg-white/20"
-                      onClick={() =>
-                        setCurrentServiceSlide((prev) =>
-                          prev === 0 ? serviceSlides.length - 1 : prev - 1,
-                        )
-                      }
-                      aria-label="Previous service"
-                    >
-                      <span className="text-xl">‹</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:border-white/60 hover:bg-white/20"
-                      onClick={() =>
-                        setCurrentServiceSlide((prev) => (prev + 1) % serviceSlides.length)
-                      }
-                      aria-label="Next service"
-                    >
-                      <span className="text-xl">›</span>
-                    </button>
-                  </div>
-                </div>
-
-                {currentSlide && (
-                  <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:items-center">
-                    <div className="space-y-4">
-                      <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-wide text-white">
-                        {currentSlide.group}
-                      </div>
-                      <h3 className="text-3xl font-bold leading-tight sm:text-4xl">
-                        {currentSlide.label}
-                      </h3>
-                      <p className="text-lg text-slate-100">{currentSlide.blurb}</p>
-                      <div className="flex flex-wrap gap-3">
-                        <button
-                          type="button"
-                          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
-                          onClick={() => handleCategorySelect(currentSlide.label)}
-                        >
-                          View category
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-full border border-white/50 px-4 py-2 text-sm font-semibold text-white transition hover:border-white hover:bg-white/10"
-                          onClick={() => setView('categories')}
-                        >
-                          See all services
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br p-6 shadow-lg">
-                      <div
-                        className={`absolute inset-0 bg-gradient-to-br opacity-70 blur-3xl ${currentSlide.palette}`}
-                        aria-hidden="true"
-                      />
-                      <div className="relative flex h-full flex-col justify-between gap-4 text-slate-900">
-                        <div className="rounded-2xl bg-white/90 p-5 shadow-sm">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
-                            Highlights
-                          </p>
-                          <p className="text-lg font-bold text-slate-900">{currentSlide.label}</p>
-                          <p className="text-sm text-slate-600">{currentSlide.blurb}</p>
-                        </div>
-                        <div className="rounded-2xl bg-white/80 p-4 shadow-sm">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
-                            Other services in {currentSlide.group}
-                          </p>
-                          <ul className="mt-2 space-y-1 text-sm text-slate-700">
-                            {serviceCategories
-                              .find((group) => group.title === currentSlide.group)
-                              ?.items.filter((item) => item.label !== currentSlide.label)
-                              .slice(0, 3)
-                              .map((item) => (
-                                <li key={item.label} className="flex items-center gap-2">
-                                  <span className="inline-block h-2 w-2 rounded-full bg-purple-500" />
-                                  <button
-                                    type="button"
-                                    className="text-left text-slate-800 transition hover:text-purple-600"
-                                    onClick={() => handleCategorySelect(item.label)}
-                                  >
-                                    {item.label}
-                                  </button>
-                                </li>
-                              ))}
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {serviceSlides.map((slide, index) => {
-                    const isActive = index === currentServiceSlide
-                    return (
-                      <button
-                        key={slide.label}
-                        type="button"
-                        onClick={() => setCurrentServiceSlide(index)}
-                        className={`h-2.5 rounded-full transition ${
-                          isActive ? 'w-8 bg-white' : 'w-2.5 bg-white/50 hover:bg-white/80'
-                        }`}
-                        aria-label={`Go to ${slide.label}`}
-                      />
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">All gigs</p>
-                <h2 className="text-2xl font-semibold text-slate-900">Fresh listings</h2>
-              </div>
-              <span className="text-sm text-slate-500">{gigs.length} live gigs</span>
-            </div>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {gigs.length === 0 && (
-                <p className="text-sm text-slate-500">No gigs yet. Check back soon.</p>
-              )}
-              {gigs.map((gig, index) => renderGigCard(gig, index))}
-            </div>
-          </section>
-        </main>
-        </>
+          <DashboardView
+            serviceSlides={serviceSlides}
+            currentServiceSlide={currentServiceSlide}
+            currentSlide={currentSlide}
+            onPrevSlide={() =>
+              setCurrentServiceSlide((prev) => (prev === 0 ? serviceSlides.length - 1 : prev - 1))
+            }
+            onNextSlide={() => setCurrentServiceSlide((prev) => (prev + 1) % serviceSlides.length)}
+            onSelectSlide={(index) => setCurrentServiceSlide(index)}
+            onSelectCategory={handleCategorySelect}
+            onShowAllCategories={() => setView('categories')}
+            gigs={gigs}
+            formatter={formatter}
+            onOpenSellerProfile={handleOpenSellerProfile}
+            onOpenChat={handleOpenChatFromGig}
+          />
         )}
 
         {view === 'chat' && (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-col gap-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Inbox</p>
-              <h2 className="text-2xl font-semibold text-slate-900">Messages with freelancers</h2>
-              <p className="text-sm text-slate-500">
-                Open a gig card and tap Chat to jump into a conversation with the seller.
-              </p>
-            </div>
-
-            <div className="mt-5 grid gap-4 lg:grid-cols-[320px_1fr]">
-              <div className="flex h-[70vh] flex-col rounded-2xl bg-slate-50/70 p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-900">Threads</p>
-                  <span className="text-xs text-slate-500">{chatThreads.length} active</span>
-                </div>
-                <div className="mt-3">
-                  <input
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                    placeholder="Search by gig, seller, or buyer"
-                    value={chatSearch}
-                    onChange={(event) => setChatSearch(event.target.value)}
-                  />
-                </div>
-                <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
-                  {visibleThreads.length === 0 && (
-                    <p className="rounded-xl border border-dashed border-slate-200 bg-white/80 px-3 py-4 text-sm text-slate-500">
-                      No conversations yet. Open a gig and hit Chat to reach the seller.
-                    </p>
-                  )}
-                  {visibleThreads.map((thread) => {
-                    const lastMessage = thread.messages[thread.messages.length - 1]
-                    return (
-                      <button
-                        key={thread.id}
-                        type="button"
-                        onClick={() => handleSelectThread(thread.id)}
-                        className={`w-full rounded-xl border px-3 py-3 text-left transition ${
-                          selectedThreadId === thread.id
-                            ? 'border-purple-300 bg-white shadow-sm'
-                            : 'border-slate-100 bg-white/70 hover:border-purple-200'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{thread.gigTitle}</p>
-                            <p className="text-xs text-slate-500">{thread.sellerName}</p>
-                          </div>
-                          <span className="text-xs text-slate-400">{timeAgo(thread.lastUpdatedAt)}</span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {lastMessage
-                            ? lastMessage.text ||
-                              lastMessage.attachments?.[0]?.name ||
-                              'Shared an attachment'
-                            : 'No messages yet'}
-                        </p>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="flex h-[70vh] flex-col rounded-2xl border border-slate-100 bg-white p-4">
-                {selectedThread ? (
-                  <>
-                    <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3">
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-900">
-                          {selectedThread.gigTitle}
-                        </h3>
-                        <p className="text-sm text-slate-500">
-                          {selectedThread.sellerName} · {selectedThread.buyerName || 'Buyer'}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                        onClick={() => setView('dashboard')}
-                      >
-                        View gig
-                      </Button>
-                    </div>
-
-                    <div className="mt-3 flex-1 space-y-3 overflow-y-auto rounded-xl bg-slate-50 px-3 py-3">
-                      {selectedThread.messages.length === 0 && (
-                        <p className="text-sm text-slate-500">
-                          Start the conversation with a quick hello or a project brief.
-                        </p>
-                      )}
-                      {selectedThread.messages.map((msg) => {
-                        const isOwn = msg.senderRole === (user?.isSeller ? 'seller' : 'buyer')
-                        return (
-                          <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                            <div
-                              className={`max-w-[80%] rounded-2xl border px-4 py-3 text-sm shadow-sm ${
-                                isOwn
-                                  ? 'border-purple-200 bg-purple-600 text-white'
-                                  : 'border-slate-100 bg-white text-slate-800'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-3 text-xs">
-                                <span className={`font-semibold ${isOwn ? 'text-white' : 'text-slate-700'}`}>
-                                  {msg.senderName}
-                                </span>
-                                <span className={isOwn ? 'text-white/80' : 'text-slate-400'}>
-                                  {formatChatTime(msg.sentAt)}
-                                </span>
-                              </div>
-                              {msg.text && <p className="mt-1 whitespace-pre-line">{msg.text}</p>}
-                              {msg.attachments?.length > 0 && (
-                                <div className="mt-2 space-y-1 text-xs">
-                                  {msg.attachments.map((file) => (
-                                    <div
-                                      key={file.id}
-                                      className={`flex items-center gap-2 rounded-lg px-2 py-1 ${
-                                        isOwn ? 'bg-purple-500/40 text-white' : 'bg-slate-100 text-slate-700'
-                                      }`}
-                                    >
-                                      <span className="font-semibold">{file.name}</span>
-                                      <span className={isOwn ? 'text-white/80' : 'text-slate-500'}>
-                                        {file.sizeLabel}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    <form className="mt-3 space-y-3" onSubmit={handleSendMessage}>
-                      {composerFiles.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {composerFiles.map((file) => (
-                            <span
-                              key={file.id}
-                              className="flex items-center gap-2 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700"
-                            >
-                              {file.name} ({file.sizeLabel})
-                              <button
-                                type="button"
-                                className="text-slate-500 transition hover:text-slate-700"
-                                onClick={() => handleRemoveComposerFile(file.id)}
-                                aria-label={`Remove ${file.name}`}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                        <input
-                          className="h-10 flex-1 rounded-full border-none bg-transparent px-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                          placeholder="Write a message..."
-                          value={composerText}
-                          onChange={(event) => setComposerText(event.target.value)}
-                        />
-                        <label className="flex cursor-pointer items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100">
-                          <span>Attach</span>
-                          <input
-                            type="file"
-                            multiple
-                            className="sr-only"
-                            onChange={handleComposerFiles}
-                          />
-                        </label>
-                        <Button type="submit" className="bg-purple-600 text-white hover:bg-purple-500">
-                          Send
-                        </Button>
-                      </div>
-                    </form>
-                  </>
-                ) : (
-                  <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200">
-                    <p className="text-sm text-slate-500">
-                      Select a thread on the left to view messages.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
+          <ChatView
+            chatThreads={chatThreads}
+            chatSearch={chatSearch}
+            onSearchChange={setChatSearch}
+            visibleThreads={visibleThreads}
+            selectedThreadId={selectedThreadId}
+            onSelectThread={handleSelectThread}
+            selectedThread={selectedThread}
+            composerText={composerText}
+            onComposerChange={setComposerText}
+            composerFiles={composerFiles}
+            onComposerFiles={handleComposerFiles}
+            onRemoveComposerFile={handleRemoveComposerFile}
+            onSendMessage={handleSendMessage}
+            onViewGig={() => setView('dashboard')}
+            user={user}
+          />
         )}
 
         {view === 'seller-profile' && (
@@ -1767,7 +1014,7 @@ const openSignupModal = () => {
                       <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
                         <p className="text-xs font-semibold text-slate-500">Rating</p>
                         <div className="mt-2 flex items-center gap-2">
-                          {renderStars(sellerRatingSummary.average)}
+                          <RatingStars rating={sellerRatingSummary.average} />
                           <span className="text-base font-semibold text-slate-900">
                             {sellerRatingSummary.average
                               ? `${sellerRatingSummary.average}/5`
@@ -1940,7 +1187,7 @@ const openSignupModal = () => {
                           Reviews
                         </p>
                         <div className="flex items-center gap-3">
-                          {renderStars(sellerRatingSummary.average)}
+                          <RatingStars rating={sellerRatingSummary.average} />
                           <div>
                             <p className="text-lg font-semibold text-slate-900">
                               {sellerRatingSummary.average
@@ -1988,7 +1235,7 @@ const openSignupModal = () => {
                             </span>
                           </div>
                           <div className="mt-2 flex items-center gap-2">
-                            {renderStars(review.rating)}
+                            <RatingStars rating={review.rating} />
                             <span className="text-sm font-semibold text-slate-900">
                               {review.rating}/5
                             </span>
@@ -2067,7 +1314,7 @@ const openSignupModal = () => {
 
 
         {view === 'seller' && (
-          <section className="w-full max-w-3xl rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
+          <section className="w-full rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-50 text-purple-600">
                 <svg
@@ -2277,7 +1524,7 @@ const openSignupModal = () => {
         )}
 
         {view === 'seller-apply' && (
-          <section className="w-full max-w-3xl rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
+          <section className="w-full rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
@@ -2573,7 +1820,16 @@ const openSignupModal = () => {
                           No gigs yet in this category. Check back soon.
                         </p>
                       )}
-                      {categoryGigs.map((gig, index) => renderGigCard(gig, index))}
+                      {categoryGigs.map((gig, index) => (
+                        <GigCard
+                          key={gig.id}
+                          gig={gig}
+                          index={index}
+                          formatter={formatter}
+                          onOpenSellerProfile={handleOpenSellerProfile}
+                          onOpenChat={handleOpenChatFromGig}
+                        />
+                      ))}
                     </div>
                   </div>
                 )
@@ -2644,8 +1900,8 @@ const openSignupModal = () => {
           </section>
         )}
 
-        <footer className="mt-10 rounded-3xl border border-slate-200 bg-gradient-to-b from-white via-slate-50 to-slate-100 px-6 py-6 text-[11px] text-slate-700 shadow-sm sm:text-xs">
-          <div className="space-y-4">
+        <footer className="mt-10 w-full border-t border-slate-200 bg-white">
+          <div className="mx-auto flex w-full flex-col gap-3 px-5 py-5 text-[11px] text-slate-700 sm:flex-row sm:items-center sm:justify-between sm:px-10 sm:text-xs">
             <p className="text-[11px] text-slate-700 sm:text-xs">
               Contact us at{" "}
               <a href="mailto:support@giglah.com" className="text-sky-700 underline-offset-2 hover:underline">
@@ -2653,36 +1909,61 @@ const openSignupModal = () => {
               </a>
               .
             </p>
-            <hr className="border-slate-200" />
-            <div className="flex flex-wrap items-center justify-between gap-2 text-slate-600 sm:text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-slate-800">
-                  Copyright © {currentYear} GigLah! All rights reserved.
-                </span>
-                <span className="text-slate-300">|</span>
-                <button
-                  type="button"
-                  className="text-slate-700 underline-offset-2 hover:underline"
-                  onClick={() => setView('privacy')}
-                >
-                  Privacy Policy
-                </button>
-                <span className="text-slate-300">|</span>
-                <button
-                  type="button"
-                  className="text-slate-700 underline-offset-2 hover:underline"
-                  onClick={() => setView('terms')}
-                >
-                  Terms of Use
-                </button>
-              </div>
+            <div className="flex flex-wrap items-center gap-2 text-slate-600 sm:text-xs">
+              <span className="font-medium text-slate-800">
+                Copyright © {currentYear} GigLah! All rights reserved.
+              </span>
+              <span className="text-slate-300">|</span>
+              <button
+                type="button"
+                className="text-slate-700 underline-offset-2 hover:underline"
+                onClick={() => setView('privacy')}
+              >
+                Privacy Policy
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                type="button"
+                className="text-slate-700 underline-offset-2 hover:underline"
+                onClick={() => setView('terms')}
+              >
+                Terms of Use
+              </button>
             </div>
           </div>
         </footer>
+
       </div>
 
-      {view === 'login' && renderLoginModal()}
-      {view === 'signup' && renderSignupModal()}
+      {view === 'login' && (
+        <LoginModal
+          forms={forms}
+          modalInputClasses={modalInputClasses}
+          onChange={handleFormChange}
+          onSubmit={handleLogin}
+          isAuthLoading={isAuthLoading}
+          formError={formErrors.login}
+          onOpenSignup={openSignupModal}
+          onClose={dismissModals}
+          showPassword={showLoginPassword}
+          onTogglePassword={() => setShowLoginPassword((prev) => !prev)}
+          onForgotPassword={handleForgotPassword}
+        />
+      )}
+      {view === 'signup' && (
+        <SignupModal
+          forms={forms}
+          modalInputClasses={modalInputClasses}
+          onChange={handleFormChange}
+          onSubmit={handleSignup}
+          isAuthLoading={isAuthLoading}
+          formError={formErrors.signup}
+          onOpenLogin={openLoginModal}
+          onClose={dismissModals}
+          showPassword={showSignupPassword}
+          onTogglePassword={() => setShowSignupPassword((prev) => !prev)}
+        />
+      )}
     </div>
   )
 }

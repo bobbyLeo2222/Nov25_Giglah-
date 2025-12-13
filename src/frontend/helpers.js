@@ -1,0 +1,108 @@
+const formatFileSize = (bytes) => {
+  if (!bytes && bytes !== 0) return '0 KB'
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1)
+  const sized = bytes / Math.pow(1024, index)
+  return `${sized.toFixed(index === 0 ? 0 : 1)} ${sizes[index]}`
+}
+
+const timeAgo = (timestamp) => {
+  const parsed = timestamp ? new Date(timestamp).getTime() : 0
+  const diff = Date.now() - parsed
+  if (!Number.isFinite(diff) || diff <= 0) return 'Just now'
+  const minutes = Math.floor(diff / (1000 * 60))
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+const formatChatTime = (timestamp) =>
+  new Intl.DateTimeFormat('en-SG', { hour: 'numeric', minute: '2-digit' }).format(
+    new Date(timestamp),
+  )
+
+const buildSellerId = (value) =>
+  (value || 'seller').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') ||
+  'seller'
+
+const defaultAvatar =
+  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80'
+const defaultHeroImage =
+  'https://images.unsplash.com/photo-1483478550801-ceba5fe50e8e?auto=format&fit=crop&w=1200&q=80'
+
+const normalizeGigMedia = (media = []) => {
+  if (!Array.isArray(media)) return []
+  return media
+    .map((item) => {
+      if (!item) return null
+      if (typeof item === 'string') return { url: item, type: 'image', thumbnailUrl: '' }
+      if (!item.url) return null
+      const type = item.type === 'video' ? 'video' : 'image'
+      return {
+        url: item.url,
+        type,
+        thumbnailUrl: item.thumbnailUrl || '',
+      }
+    })
+    .filter(Boolean)
+}
+
+const normalizeGig = (gig) => ({
+  id: gig._id || gig.id,
+  title: gig.title,
+  seller: gig.sellerName || gig.seller || 'Seller',
+  sellerId: gig.sellerId || gig.sellerProfile?.sellerId || gig.sellerProfile?._id || '',
+  category: gig.category || '',
+  price: gig.price || 0,
+  status: gig.status || 'Published',
+  description: gig.description || '',
+  owner: gig.owner || null,
+  imageUrl: gig.imageUrl || '',
+  instagramUrl: gig.instagramUrl || '',
+  websiteUrl: gig.websiteUrl || '',
+  media: normalizeGigMedia(gig.media),
+})
+
+const normalizeProfile = (profile) => ({
+  id: profile.sellerId || profile._id,
+  name: profile.displayName || profile.user?.name || 'Seller',
+  headline: profile.headline || 'Independent seller',
+  about: profile.bio || 'Describe your expertise so buyers know what you do.',
+  location: profile.location || 'Location not set',
+  avatar: profile.imageUrl || defaultAvatar,
+  heroImage: profile.imageUrl || defaultHeroImage,
+  specialties: profile.skills || ['Custom engagements', 'Flexible timelines'],
+  languages: profile.languages || [],
+  stats: profile.stats || { projects: 0, response: 'ƒ?"', repeat: 'ƒ?"' },
+  socials: { website: profile.websiteUrl || '', instagram: profile.instagramUrl || '' },
+  availability: profile.availability || 'Available',
+})
+
+const normalizeReview = (review) => ({
+  id: review._id || review.id,
+  reviewerName: review.buyer?.name || review.reviewerName || 'Buyer',
+  rating: review.rating,
+  comment: review.text || review.comment,
+  project: review.project || 'Custom brief',
+  createdAt: review.createdAt ? new Date(review.createdAt).getTime() : Date.now(),
+})
+
+const mapUserFromApi = (apiUser) =>
+  apiUser ? { ...apiUser, isSeller: apiUser.role === 'seller' } : null
+
+export {
+  buildSellerId,
+  defaultAvatar,
+  defaultHeroImage,
+  formatChatTime,
+  formatFileSize,
+  mapUserFromApi,
+  normalizeGig,
+  normalizeGigMedia,
+  normalizeProfile,
+  normalizeReview,
+  timeAgo,
+}
