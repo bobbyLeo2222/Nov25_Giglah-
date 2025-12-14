@@ -18,6 +18,8 @@ import ChatView from '@/frontend/views/ChatView'
 import SellerApplicationView from '@/frontend/views/SellerApplicationView'
 import SellerProfileView from '@/frontend/views/SellerProfileView'
 import SellerGigCreateView from '@/frontend/views/SellerGigCreateView'
+import UserProfileView from '@/frontend/views/UserProfileView'
+import GigDetailView from '@/frontend/views/GigDetailView'
 import {
   buildSellerId,
   defaultAvatar,
@@ -61,6 +63,7 @@ function App() {
   const [sellerProfiles, setSellerProfiles] = useState([])
   const [sellerReviews, setSellerReviews] = useState({})
   const [selectedSellerId, setSelectedSellerId] = useState('')
+  const [selectedGigId, setSelectedGigId] = useState('')
   const [reviewDraft, setReviewDraft] = useState({ rating: 5, text: '', project: '' })
   const [currentServiceSlide, setCurrentServiceSlide] = useState(0)
   const [chatThreads, setChatThreads] = useState([])
@@ -98,6 +101,11 @@ function App() {
     [sellerProfiles, selectedSellerId],
   )
 
+  const selectedGig = useMemo(
+    () => gigs.find((gig) => gig.id === selectedGigId) || null,
+    [gigs, selectedGigId],
+  )
+
   const sellerPortfolio = useMemo(
     () => gigs.filter((gig) => gig.sellerId === selectedSellerId),
     [gigs, selectedSellerId],
@@ -107,6 +115,18 @@ function App() {
     () => sellerReviews[selectedSellerId] || [],
     [sellerReviews, selectedSellerId],
   )
+
+  const relatedGigs = useMemo(() => {
+    if (!selectedGig) return []
+    const category = (selectedGig.category || '').toLowerCase()
+    return gigs
+      .filter(
+        (gig) =>
+          gig.id !== selectedGig.id &&
+          (gig.category || '').toLowerCase() === category,
+      )
+      .slice(0, 4)
+  }, [gigs, selectedGig])
 
   const sellerRatingSummary = useMemo(() => {
     if (!sellerReviewList.length) return { average: 0, count: 0 }
@@ -162,6 +182,34 @@ function App() {
   )
 
   const userGigCount = myGigs.length
+
+  const myProfile = useMemo(() => {
+    if (!user) return null
+    const sellerProfile = sellerProfiles.find((profile) => profile.id === userSellerId) || null
+    return {
+      ...sellerProfile,
+      name: user.name || sellerProfile?.name || 'Member',
+      email: user.email || '',
+      headline: sellerProfile?.headline || '',
+      about: sellerProfile?.about || '',
+      avatar: sellerProfile?.avatar || defaultAvatar,
+      location: sellerProfile?.location || '',
+      languages: sellerProfile?.languages || [],
+      stats: sellerProfile?.stats || { projects: userGigCount, response: '—', repeat: '—' },
+    }
+  }, [sellerProfiles, user, userGigCount, userSellerId])
+
+  const myReviewList = useMemo(
+    () => (userSellerId ? sellerReviews[userSellerId] || [] : []),
+    [sellerReviews, userSellerId],
+  )
+
+  const myRatingSummary = useMemo(() => {
+    if (!myReviewList.length) return { average: 0, count: 0 }
+    const total = myReviewList.reduce((sum, review) => sum + (Number(review.rating) || 0), 0)
+    const average = Number((total / myReviewList.length).toFixed(1))
+    return { average, count: myReviewList.length }
+  }, [myReviewList])
 
   const categoryLabels = useMemo(
     () => serviceCategories.flatMap((group) => group.items.map((item) => item.label)),
@@ -320,7 +368,25 @@ function App() {
     setView('seller-profile')
   }
 
+  const handleOpenGigDetail = (gig) => {
+    if (!gig) return
+    setSelectedGigId(gig.id)
+    if (gig.sellerId) {
+      ensureSellerProfile(gig.sellerId, gig.seller)
+      setSelectedSellerId(gig.sellerId)
+    }
+    setView('gig-detail')
+  }
+
   const handleOpenMyProfile = () => {
+    if (!user) return
+    const sellerId = userSellerId || buildSellerId(user.email || user.name || '')
+    ensureSellerProfile(sellerId, user.name || 'Member')
+    setSelectedSellerId(sellerId)
+    setView('user-profile')
+  }
+
+  const handleViewPublicSellerProfile = () => {
     if (!user) return
     const sellerId = userSellerId || buildSellerId(user.email || user.name || '')
     ensureSellerProfile(sellerId, user.name || 'Member')
@@ -933,6 +999,7 @@ const openSignupModal = () => {
             formatter={formatter}
             onOpenSellerProfile={handleOpenSellerProfile}
             onOpenChat={handleOpenChatFromGig}
+            onOpenGig={handleOpenGigDetail}
           />
         )}
 
@@ -956,6 +1023,21 @@ const openSignupModal = () => {
           />
         )}
 
+        {view === 'gig-detail' && (
+          <GigDetailView
+            gig={selectedGig}
+            seller={selectedSeller}
+            sellerRatingSummary={sellerRatingSummary}
+            sellerReviewList={sellerReviewList}
+            formatter={formatter}
+            onBackToDashboard={() => setView('dashboard')}
+            onOpenSellerProfile={handleOpenSellerProfile}
+            onOpenChat={handleOpenChatFromGig}
+            onOpenRelatedGig={handleOpenGigDetail}
+            relatedGigs={relatedGigs}
+          />
+        )}
+
         {view === 'seller-profile' && (
           <SellerProfileView
             selectedSeller={selectedSeller}
@@ -969,6 +1051,22 @@ const openSignupModal = () => {
             onBackToDashboard={() => setView('dashboard')}
             onSubmitReview={handleSubmitReview}
             onReviewDraftChange={handleReviewDraftChange}
+            onOpenChatFromGig={handleOpenChatFromGig}
+          />
+        )}
+
+        {view === 'user-profile' && (
+          <UserProfileView
+            user={user}
+            profile={myProfile}
+            myGigs={myGigs}
+            reviewList={myReviewList}
+            ratingSummary={myRatingSummary}
+            formatter={formatter}
+            timeAgo={timeAgo}
+            onBackToDashboard={() => setView('dashboard')}
+            onViewPublicProfile={handleViewPublicSellerProfile}
+            onOpenSellerTools={() => setView('seller')}
             onOpenChatFromGig={handleOpenChatFromGig}
           />
         )}
@@ -1088,6 +1186,7 @@ const openSignupModal = () => {
                           formatter={formatter}
                           onOpenSellerProfile={handleOpenSellerProfile}
                           onOpenChat={handleOpenChatFromGig}
+                          onOpenGig={handleOpenGigDetail}
                         />
                       ))}
                     </div>

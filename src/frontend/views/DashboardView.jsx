@@ -15,6 +15,7 @@ function DashboardView({
   formatter,
   onOpenSellerProfile,
   onOpenChat,
+  onOpenGig,
 }) {
   return (
     <>
@@ -204,6 +205,7 @@ function DashboardView({
                 formatter={formatter}
                 onOpenSellerProfile={onOpenSellerProfile}
                 onOpenChat={onOpenChat}
+                onOpenGig={onOpenGig}
               />
             ))}
           </div>

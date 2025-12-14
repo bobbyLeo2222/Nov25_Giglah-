@@ -1,7 +1,7 @@
 import { gigAccentClasses } from '@/data/static'
 import { ChatBubbleIcon, GlobeIcon, InstagramIcon } from '@/frontend/components/icons'
 
-function GigCard({ gig, index = 0, formatter, onOpenSellerProfile, onOpenChat }) {
+function GigCard({ gig, index = 0, formatter, onOpenSellerProfile, onOpenChat, onOpenGig }) {
   const primaryImage =
     gig.imageUrl || gig.media?.find((item) => item.type === 'image')?.url || ''
   const primaryVideo =
@@ -61,6 +61,13 @@ function GigCard({ gig, index = 0, formatter, onOpenSellerProfile, onOpenChat })
               {gig.price ? formatter.format(gig.price) : 'Pricing TBD'}
             </span>
           </div>
+          <button
+            type="button"
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-purple-200 hover:text-purple-700"
+            onClick={() => onOpenGig?.(gig)}
+          >
+            View details
+          </button>
           <div className="flex items-center gap-3">
             {gig.websiteUrl && (
               <a
