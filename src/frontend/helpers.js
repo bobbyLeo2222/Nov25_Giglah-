@@ -50,21 +50,27 @@ const normalizeGigMedia = (media = []) => {
     .filter(Boolean)
 }
 
-const normalizeGig = (gig) => ({
-  id: gig._id || gig.id,
-  title: gig.title,
-  seller: gig.sellerName || gig.seller || 'Seller',
-  sellerId: gig.sellerId || gig.sellerProfile?.sellerId || gig.sellerProfile?._id || '',
-  category: gig.category || '',
-  price: gig.price || 0,
-  status: gig.status || 'Published',
-  description: gig.description || '',
-  owner: gig.owner || null,
-  imageUrl: gig.imageUrl || '',
-  instagramUrl: gig.instagramUrl || '',
-  websiteUrl: gig.websiteUrl || '',
-  media: normalizeGigMedia(gig.media),
-})
+const normalizeGig = (gig) => {
+  const rawSeller = gig.seller
+  const sellerUserId =
+    typeof rawSeller === 'string' && /^[a-f0-9]{24}$/i.test(rawSeller) ? rawSeller : ''
+  return {
+    id: gig._id || gig.id,
+    title: gig.title,
+    seller: gig.sellerName || gig.seller || 'Seller',
+    sellerUserId,
+    sellerId: gig.sellerId || gig.sellerProfile?.sellerId || gig.sellerProfile?._id || '',
+    category: gig.category || '',
+    price: gig.price || 0,
+    status: gig.status || 'Published',
+    description: gig.description || '',
+    owner: gig.owner || null,
+    imageUrl: gig.imageUrl || '',
+    instagramUrl: gig.instagramUrl || '',
+    websiteUrl: gig.websiteUrl || '',
+    media: normalizeGigMedia(gig.media),
+  }
+}
 
 const normalizeProfile = (profile) => ({
   id: profile.sellerId || profile._id,

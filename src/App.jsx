@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import TopBar from '@/components/ui/TopBar'
 import {
@@ -34,12 +35,16 @@ import {
 import { fetchJSON, getStoredToken, setStoredToken } from '@/lib/api'
 
 function App() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [view, setView] = useState('dashboard')
   const [forms, setForms] = useState({
     signup: { fullName: '', email: '', password: '' },
     login: { email: '', password: '' },
   })
   const [authToken, setAuthToken] = useState(() => getStoredToken())
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [showSignupModal, setShowSignupModal] = useState(false)
   const [isAuthLoading, setIsAuthLoading] = useState(false)
   const [user, setUser] = useState(null)
   const [gigs, setGigs] = useState([])
@@ -204,6 +209,64 @@ function App() {
     [sellerReviews, userSellerId],
   )
 
+  const syncViewFromPath = useCallback(() => {
+    const gigMatch = matchPath('/gig/:gigId', location.pathname)
+    if (gigMatch?.params?.gigId) {
+      setSelectedGigId(gigMatch.params.gigId)
+      setView('gig-detail')
+      return
+    }
+
+    const sellerMatch = matchPath('/seller/:sellerId', location.pathname)
+    if (sellerMatch?.params?.sellerId) {
+      setSelectedSellerId(sellerMatch.params.sellerId)
+      setView('seller-profile')
+      return
+    }
+
+    const chatMatch = matchPath('/chats/:threadId', location.pathname)
+    if (chatMatch?.params?.threadId) {
+      setSelectedThreadId(chatMatch.params.threadId)
+      setView('chat')
+      return
+    }
+
+    if (location.pathname === '/chats') {
+      setSelectedThreadId('')
+      setView('chat')
+      return
+    }
+    if (location.pathname === '/categories') {
+      setView('categories')
+      return
+    }
+    if (location.pathname === '/privacy') {
+      setView('privacy')
+      return
+    }
+    if (location.pathname === '/terms') {
+      setView('terms')
+      return
+    }
+    if (location.pathname === '/me') {
+      setView('user-profile')
+      return
+    }
+    if (location.pathname === '/seller-tools') {
+      setView('seller')
+      return
+    }
+    if (location.pathname === '/seller/apply') {
+      setView('seller-apply')
+      return
+    }
+    setView('dashboard')
+  }, [location.pathname])
+
+  useEffect(() => {
+    syncViewFromPath()
+  }, [syncViewFromPath])
+
   const myRatingSummary = useMemo(() => {
     if (!myReviewList.length) return { average: 0, count: 0 }
     const total = myReviewList.reduce((sum, review) => sum + (Number(review.rating) || 0), 0)
@@ -339,6 +402,113 @@ function App() {
     }
   }, [selectedSellerId])
 
+  const buildThreadTitleFromGig = (gig) => {
+    if (!gig) return 'Conversation'
+    const safeTitle = gig.title || 'Conversation'
+    return `gig:${gig.id || gig._id || ''}:${safeTitle}`
+  }
+
+  const parseThreadTitle = (title = '') => {
+    if (title.startsWith('gig:')) {
+      const [, gigId = '', ...rest] = title.split(':')
+      const gigTitle = rest.join(':') || 'Conversation'
+      return { gigId, gigTitle }
+    }
+    return { gigId: '', gigTitle: title || 'Conversation' }
+  }
+
+  const normalizeThread = useCallback(
+    (thread) => {
+      if (!thread) return null
+      const { gigId, gigTitle } = parseThreadTitle(thread.title || '')
+      const participants = thread.participants || []
+      const participantMap = new Map(
+        participants.map((participant) => [
+          participant._id?.toString() || participant.id,
+          participant,
+        ]),
+      )
+      const sellerParticipant =
+        participants.find((participant) => participant.role === 'seller') || null
+      const buyerParticipant =
+        participants.find((participant) => participant.role !== 'seller') || null
+      const messages = (thread.messages || []).map((msg, index) => {
+        const senderId = msg.sender?._id?.toString() || msg.sender?.toString() || ''
+        const sender = senderId ? participantMap.get(senderId) : null
+        const senderRole = sender?.role === 'seller' ? 'seller' : 'buyer'
+        return {
+          id: msg._id || msg.id || `msg-${index}-${Date.now()}`,
+          senderRole,
+          senderName: sender?.name || 'Member',
+          text: msg.text || '',
+          sentAt: msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now(),
+          attachments: (msg.files || []).map((file, fileIndex) => ({
+            id: `${msg._id || msg.id || 'file'}-${fileIndex}`,
+            name: file.name || 'Attachment',
+            sizeLabel: formatFileSize(file.size || 0),
+            type: file.type || 'file',
+            previewUrl: file.url || '',
+          })),
+        }
+      })
+
+      return {
+        id: thread._id || thread.id,
+        gigId,
+        gigTitle: gigTitle || thread.title || 'Conversation',
+        sellerName: sellerParticipant?.name || 'Seller',
+        buyerName: buyerParticipant?.name || '',
+        buyerEmail: buyerParticipant?.email || '',
+        lastUpdatedAt: thread.lastMessageAt
+          ? new Date(thread.lastMessageAt).getTime()
+          : messages[messages.length - 1]?.sentAt || Date.now(),
+        messages,
+      }
+    },
+    [formatFileSize],
+  )
+
+  useEffect(() => {
+    if (!user || !authToken) {
+      setChatThreads([])
+      return
+    }
+    let cancelled = false
+    authedFetch('/api/chats')
+      .then((data) => {
+        if (cancelled) return
+        const normalized = (data?.threads || []).map(normalizeThread).filter(Boolean)
+        setChatThreads(normalized)
+      })
+      .catch((error) => {
+        console.error('Failed to load chats', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [authToken, normalizeThread, user])
+
+  useEffect(() => {
+    if (!user || !authToken || !selectedThreadId) return undefined
+    let cancelled = false
+    authedFetch(`/api/chats/${selectedThreadId}`)
+      .then((data) => {
+        if (cancelled || !data?.thread) return
+        const normalized = normalizeThread(data.thread)
+        if (!normalized) return
+        setChatThreads((prev) => {
+          const others = prev.filter((thread) => thread.id !== normalized.id)
+          return [normalized, ...others]
+        })
+      })
+      .catch((error) => {
+        console.error('Failed to load thread', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [authToken, normalizeThread, selectedThreadId, user])
+
   const ensureSellerProfile = (sellerId, sellerName, extras = {}) => {
     if (!sellerId) return
     setSellerProfiles((prev) => {
@@ -365,7 +535,7 @@ function App() {
     if (!sellerId) return
     ensureSellerProfile(sellerId, sellerName)
     setSelectedSellerId(sellerId)
-    setView('seller-profile')
+    navigate(`/seller/${sellerId}`)
   }
 
   const handleOpenGigDetail = (gig) => {
@@ -375,7 +545,7 @@ function App() {
       ensureSellerProfile(gig.sellerId, gig.seller)
       setSelectedSellerId(gig.sellerId)
     }
-    setView('gig-detail')
+    navigate(`/gig/${gig.id}`)
   }
 
   const handleOpenMyProfile = () => {
@@ -383,7 +553,7 @@ function App() {
     const sellerId = userSellerId || buildSellerId(user.email || user.name || '')
     ensureSellerProfile(sellerId, user.name || 'Member')
     setSelectedSellerId(sellerId)
-    setView('user-profile')
+    navigate('/me')
   }
 
   const handleViewPublicSellerProfile = () => {
@@ -391,13 +561,17 @@ function App() {
     const sellerId = userSellerId || buildSellerId(user.email || user.name || '')
     ensureSellerProfile(sellerId, user.name || 'Member')
     setSelectedSellerId(sellerId)
-    setView('seller-profile')
+    navigate(`/seller/${sellerId}`)
   }
 
   const handleCategorySelect = (label) => {
     setActiveCategory(label)
-    setView('categories')
+    navigate('/categories')
   }
+
+  const goToDashboard = useCallback(() => navigate('/'), [navigate])
+  const goToSellerTools = useCallback(() => navigate('/seller-tools'), [navigate])
+  const goToChats = useCallback(() => navigate('/chats'), [navigate])
 
   const getCategoryIcon = (label) => {
     for (const group of serviceCategories) {
@@ -411,6 +585,7 @@ function App() {
     setSelectedThreadId(threadId)
     setComposerText('')
     setComposerFiles([])
+    navigate(threadId ? `/chats/${threadId}` : '/chats')
   }
 
   const handleComposerFiles = (event) => {
@@ -431,14 +606,15 @@ function App() {
     setComposerFiles((prev) => prev.filter((file) => file.id !== fileId))
   }
 
-  const handleSendMessage = (event) => {
+  const handleSendMessage = async (event) => {
     event.preventDefault()
     if (!selectedThread) {
       setMessage('Pick a conversation first.')
       return
     }
-    if (!user) {
+    if (!user || !authToken) {
       setMessage('Log in to send messages.')
+      setShowLoginModal(true)
       return
     }
     const text = composerText.trim()
@@ -446,64 +622,113 @@ function App() {
       setMessage('Type a message or attach a file first.')
       return
     }
-    const now = Date.now()
-    const newMessage = {
-      id: `msg-${now}`,
-      senderRole: user?.isSeller ? 'seller' : 'buyer',
-      senderName: user?.name || 'Member',
-      text,
-      sentAt: now,
-      attachments: composerFiles.map((file) => ({
-        id: file.id,
-        name: file.name,
-        type: file.type,
-        sizeLabel: file.sizeLabel,
-        previewUrl: file.previewUrl,
-      })),
+    try {
+      const data = await authedFetch(`/api/chats/${selectedThread.id}/messages`, {
+        method: 'POST',
+        body: {
+          text,
+          files: [],
+        },
+      })
+      const now = Date.now()
+      const newMessage = data?.message
+        ? {
+            id: data.message._id || data.message.id || `msg-${now}`,
+            senderRole: user?.isSeller ? 'seller' : 'buyer',
+            senderName: user?.name || 'Member',
+            text: data.message.text || text,
+            sentAt: data.message.createdAt ? new Date(data.message.createdAt).getTime() : now,
+            attachments: (data.message.files || []).map((file, index) => ({
+              id: `${data.message._id || data.message.id || 'file'}-${index}`,
+              name: file.name || 'Attachment',
+              type: file.type || 'file',
+              sizeLabel: formatFileSize(file.size || 0),
+              previewUrl: file.url || '',
+            })),
+          }
+        : {
+            id: `msg-${now}`,
+            senderRole: user?.isSeller ? 'seller' : 'buyer',
+            senderName: user?.name || 'Member',
+            text,
+            sentAt: now,
+            attachments: composerFiles.map((file) => ({
+              id: file.id,
+              name: file.name,
+              type: file.type,
+              sizeLabel: file.sizeLabel,
+              previewUrl: file.previewUrl,
+            })),
+          }
+      setChatThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === selectedThread.id
+            ? { ...thread, lastUpdatedAt: newMessage.sentAt, messages: [...thread.messages, newMessage] }
+            : thread,
+        ),
+      )
+      setComposerText('')
+      setComposerFiles([])
+      setMessage('Message sent.')
+    } catch (error) {
+      const message = error.message || 'Unable to send message.'
+      setMessage(message)
     }
-    setChatThreads((prev) =>
-      prev.map((thread) =>
-        thread.id === selectedThread.id
-          ? { ...thread, lastUpdatedAt: now, messages: [...thread.messages, newMessage] }
-          : thread,
-      ),
-    )
-    setComposerText('')
-    setComposerFiles([])
-    setMessage('Message sent.')
   }
 
-  const handleOpenChatFromGig = (gig) => {
+  const handleOpenChatFromGig = async (gig) => {
     if (!gig) return
     if (gig.sellerId) {
       ensureSellerProfile(gig.sellerId, gig.seller)
       setSelectedSellerId(gig.sellerId)
+    }
+    if (!user || !authToken) {
+      setMessage('Log in to message the seller.')
+      setShowLoginModal(true)
+      navigate('/chats')
+      return
+    }
+    const sellerParticipantId = gig.sellerUserId || gig.owner || ''
+    if (!sellerParticipantId) {
+      setMessage('Seller information is missing for this gig.')
+      return
     }
     const existingThread = chatThreads.find((thread) => thread.gigId === gig.id)
     setComposerText('')
     setComposerFiles([])
     if (existingThread) {
       setSelectedThreadId(existingThread.id)
-      setView('chat')
+      navigate(`/chats/${existingThread.id}`)
       return
     }
-    const now = Date.now()
-    const buyerAlias = user?.name || 'Buyer'
-    const newThread = {
-      id: `thread-${gig.id}`,
-      gigId: gig.id,
-      gigTitle: gig.title,
-      sellerName: gig.seller || 'Seller',
-      buyerName: buyerAlias,
-      buyerEmail: user?.email || '',
-      lastUpdatedAt: now,
-      messages: [],
-    }
-    setChatThreads((prev) => [newThread, ...prev])
-    setSelectedThreadId(newThread.id)
-    setView('chat')
-    if (!user) {
-      setMessage('Log in to message the seller.')
+    try {
+      const threadTitle = buildThreadTitleFromGig(gig)
+      const participantIds = [user._id || user.id, sellerParticipantId].filter(Boolean)
+      const created = await authedFetch('/api/chats', {
+        method: 'POST',
+        body: { participantIds, title: threadTitle },
+      })
+      const threadId = created?.thread?._id || created?.thread?.id
+      let normalized = null
+      if (threadId) {
+        const fetched = await authedFetch(`/api/chats/${threadId}`)
+        normalized = normalizeThread(fetched?.thread || created.thread)
+      } else if (created?.thread) {
+        normalized = normalizeThread(created.thread)
+      }
+      if (normalized) {
+        setChatThreads((prev) => [
+          normalized,
+          ...prev.filter((thread) => thread.id !== normalized.id),
+        ])
+        setSelectedThreadId(normalized.id)
+        navigate(`/chats/${normalized.id}`)
+      } else {
+        setMessage('Unable to open chat.')
+      }
+    } catch (error) {
+      const message = error.message || 'Unable to open chat.'
+      setMessage(message)
     }
   }
 
@@ -549,8 +774,9 @@ function App() {
         signup: { fullName: '', email: '', password: '' },
       }))
       setMessage('Account created. Switch to seller any time.')
-      setView('dashboard')
+      navigate('/')
       setShowSignupPassword(false)
+      setShowSignupModal(false)
     } catch (error) {
       const message = error.message || 'Unable to create account.'
       setFormErrors((prev) => ({ ...prev, signup: message }))
@@ -600,8 +826,9 @@ function App() {
         login: { email: '', password: '' },
       }))
       setMessage('Welcome back.')
-      setView('dashboard')
+      navigate('/')
       setShowLoginPassword(false)
+      setShowLoginModal(false)
     } catch (error) {
       const message = error.message || 'Unable to sign in.'
       setFormErrors((prev) => ({ ...prev, login: message }))
@@ -614,11 +841,12 @@ function App() {
   const handleLogout = () => {
     clearAuth()
     setMessage('Signed out.')
-    setView('dashboard')
+    navigate('/')
   }
 
   const dismissModals = () => {
-    setView('dashboard')
+    setShowLoginModal(false)
+    setShowSignupModal(false)
     setShowLoginPassword(false)
     setShowSignupPassword(false)
     setFormErrors({ signup: '', login: '' })
@@ -740,13 +968,15 @@ const handleForgotPassword = () => {
 const openLoginModal = () => {
   setFormErrors((prev) => ({ ...prev, login: '' }))
   setShowLoginPassword(false)
-  setView('login')
+  setShowLoginModal(true)
+  setShowSignupModal(false)
 }
 
 const openSignupModal = () => {
   setFormErrors((prev) => ({ ...prev, signup: '' }))
   setShowSignupPassword(false)
-  setView('signup')
+  setShowSignupModal(true)
+  setShowLoginModal(false)
 }
 
   const startSellerApplication = () => {
@@ -756,13 +986,13 @@ const openSignupModal = () => {
     }
     setSellerError('')
     setSellerForm(initialSellerForm)
-    setView('seller-apply')
+    navigate('/seller/apply')
   }
 
   const cancelSellerApplication = () => {
     setSellerError('')
     setSellerForm(initialSellerForm)
-    setView('seller')
+    navigate('/seller-tools')
   }
 
   const handleSellerFormChange = (field) => (event) => {
@@ -879,7 +1109,7 @@ const openSignupModal = () => {
       }
       setUser((prev) => (prev ? { ...prev, isSeller: true, role: 'seller' } : prev))
       setSellerForm(initialSellerForm)
-      setView('seller')
+      navigate('/seller-tools')
       setMessage('Seller profile saved. Draft your first gig to go live.')
     } catch (error) {
       const message = error.message || 'Unable to save seller profile.'
@@ -950,18 +1180,26 @@ const openSignupModal = () => {
     }
   }
 
-  const isWorkspaceView = view === 'dashboard' || view === 'login' || view === 'signup'
+  const isWorkspaceView = view === 'dashboard'
   const currentYear = new Date().getFullYear()
+
+  const handleViewGigFromChat = () => {
+    if (selectedThread?.gigId) {
+      navigate(`/gig/${selectedThread.gigId}`)
+    } else {
+      navigate('/')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-white text-slate-900 antialiased overflow-x-hidden">
       <TopBar
         user={user}
-        onDashboard={() => setView('dashboard')}
+        onDashboard={goToDashboard}
         onLogin={openLoginModal}
         onSignup={openSignupModal}
-        onChat={() => setView('chat')}
-        onSellerTools={() => setView('seller')}
+        onChat={goToChats}
+        onSellerTools={goToSellerTools}
         onProfile={handleOpenMyProfile}
         onLogout={handleLogout}
       />
@@ -994,7 +1232,7 @@ const openSignupModal = () => {
             onNextSlide={() => setCurrentServiceSlide((prev) => (prev + 1) % serviceSlides.length)}
             onSelectSlide={(index) => setCurrentServiceSlide(index)}
             onSelectCategory={handleCategorySelect}
-            onShowAllCategories={() => setView('categories')}
+            onShowAllCategories={() => navigate('/categories')}
             gigs={gigs}
             formatter={formatter}
             onOpenSellerProfile={handleOpenSellerProfile}
@@ -1018,7 +1256,7 @@ const openSignupModal = () => {
             onComposerFiles={handleComposerFiles}
             onRemoveComposerFile={handleRemoveComposerFile}
             onSendMessage={handleSendMessage}
-            onViewGig={() => setView('dashboard')}
+            onViewGig={handleViewGigFromChat}
             user={user}
           />
         )}
@@ -1030,7 +1268,7 @@ const openSignupModal = () => {
             sellerRatingSummary={sellerRatingSummary}
             sellerReviewList={sellerReviewList}
             formatter={formatter}
-            onBackToDashboard={() => setView('dashboard')}
+            onBackToDashboard={goToDashboard}
             onOpenSellerProfile={handleOpenSellerProfile}
             onOpenChat={handleOpenChatFromGig}
             onOpenRelatedGig={handleOpenGigDetail}
@@ -1048,7 +1286,7 @@ const openSignupModal = () => {
             formatter={formatter}
             timeAgo={timeAgo}
             user={user}
-            onBackToDashboard={() => setView('dashboard')}
+            onBackToDashboard={goToDashboard}
             onSubmitReview={handleSubmitReview}
             onReviewDraftChange={handleReviewDraftChange}
             onOpenChatFromGig={handleOpenChatFromGig}
@@ -1064,9 +1302,9 @@ const openSignupModal = () => {
             ratingSummary={myRatingSummary}
             formatter={formatter}
             timeAgo={timeAgo}
-            onBackToDashboard={() => setView('dashboard')}
+            onBackToDashboard={goToDashboard}
             onViewPublicProfile={handleViewPublicSellerProfile}
-            onOpenSellerTools={() => setView('seller')}
+            onOpenSellerTools={goToSellerTools}
             onOpenChatFromGig={handleOpenChatFromGig}
           />
         )}
@@ -1276,7 +1514,7 @@ const openSignupModal = () => {
               <button
                 type="button"
                 className="text-slate-700 underline-offset-2 hover:underline"
-                onClick={() => setView('privacy')}
+                onClick={() => navigate('/privacy')}
               >
                 Privacy Policy
               </button>
@@ -1284,7 +1522,7 @@ const openSignupModal = () => {
               <button
                 type="button"
                 className="text-slate-700 underline-offset-2 hover:underline"
-                onClick={() => setView('terms')}
+                onClick={() => navigate('/terms')}
               >
                 Terms of Use
               </button>
@@ -1294,7 +1532,7 @@ const openSignupModal = () => {
 
       </div>
 
-      {view === 'login' && (
+      {showLoginModal && (
         <LoginModal
           forms={forms}
           modalInputClasses={modalInputClasses}
@@ -1309,7 +1547,7 @@ const openSignupModal = () => {
           onForgotPassword={handleForgotPassword}
         />
       )}
-      {view === 'signup' && (
+      {showSignupModal && (
         <SignupModal
           forms={forms}
           modalInputClasses={modalInputClasses}
