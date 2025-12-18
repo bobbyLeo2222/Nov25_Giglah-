@@ -32,7 +32,14 @@ import {
   normalizeReview,
   timeAgo,
 } from '@/frontend/helpers'
-import { fetchJSON, getStoredToken, setStoredToken } from '@/lib/api'
+import {
+  fetchJSON,
+  getStoredRefreshToken,
+  getStoredToken,
+  refreshAccessToken,
+  setStoredRefreshToken,
+  setStoredToken,
+} from '@/lib/api'
 
 function App() {
   const navigate = useNavigate()
@@ -63,6 +70,10 @@ function App() {
     signup: '',
     login: '',
   })
+  const [verifyForm, setVerifyForm] = useState({ email: '', token: '' })
+  const [resetForm, setResetForm] = useState({ email: '', token: '', password: '' })
+  const [isVerifySubmitting, setIsVerifySubmitting] = useState(false)
+  const [isResetSubmitting, setIsResetSubmitting] = useState(false)
   const [sellerForm, setSellerForm] = useState(initialSellerForm)
   const [sellerError, setSellerError] = useState('')
   const [sellerProfiles, setSellerProfiles] = useState([])
@@ -80,14 +91,18 @@ function App() {
   const [isLoadingData, setIsLoadingData] = useState(false)
   const [dataError, setDataError] = useState('')
   const authedFetch = (path, options = {}) => fetchJSON(path, { ...options, token: authToken })
-  const persistAuth = (token, apiUser) => {
+  const persistAuth = (token, apiUser, refreshToken) => {
     setAuthToken(token || '')
     setStoredToken(token || '')
+    if (refreshToken !== undefined) {
+      setStoredRefreshToken(refreshToken || '')
+    }
     setUser(mapUserFromApi(apiUser))
   }
   const clearAuth = () => {
     setAuthToken('')
     setStoredToken('')
+    setStoredRefreshToken('')
     setUser(null)
   }
 
@@ -260,12 +275,32 @@ function App() {
       setView('seller-apply')
       return
     }
+    if (location.pathname === '/verify-email') {
+      setView('verify-email')
+      return
+    }
+    if (location.pathname === '/reset-password') {
+      setView('reset-password')
+      return
+    }
     setView('dashboard')
   }, [location.pathname])
 
   useEffect(() => {
     syncViewFromPath()
   }, [syncViewFromPath])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || '')
+    const email = params.get('email') || ''
+    const token = params.get('token') || ''
+    if (location.pathname === '/verify-email') {
+      setVerifyForm((prev) => ({ ...prev, email, token }))
+    }
+    if (location.pathname === '/reset-password') {
+      setResetForm((prev) => ({ ...prev, email, token }))
+    }
+  }, [location.pathname, location.search])
 
   const myRatingSummary = useMemo(() => {
     if (!myReviewList.length) return { average: 0, count: 0 }
@@ -340,9 +375,14 @@ function App() {
       })
       .catch((error) => {
         console.error('Failed to restore session', error)
-        if (!cancelled) {
-          clearAuth()
-        }
+        if (cancelled) return
+        refreshAccessToken()
+          .then((newToken) => {
+            setAuthToken(newToken)
+          })
+          .catch(() => {
+            clearAuth()
+          })
       })
       .finally(() => {
         if (!cancelled) setIsAuthLoading(false)
@@ -767,7 +807,7 @@ function App() {
         },
       })
       if (data?.token && data?.user) {
-        persistAuth(data.token, data.user)
+        persistAuth(data.token, data.user, data.refreshToken)
       }
       setForms((prev) => ({
         ...prev,
@@ -813,7 +853,7 @@ function App() {
         body: { email: email.trim().toLowerCase(), password },
       })
       if (data?.token && data?.user) {
-        persistAuth(data.token, data.user)
+        persistAuth(data.token, data.user, data.refreshToken)
       } else {
         setUser({
           name: friendlyName,
@@ -839,6 +879,12 @@ function App() {
   }
 
   const handleLogout = () => {
+    const refresh = getStoredRefreshToken()
+    if (refresh) {
+      fetchJSON('/api/auth/logout', { method: 'POST', body: { refreshToken: refresh } }).catch(
+        () => {},
+      )
+    }
     clearAuth()
     setMessage('Signed out.')
     navigate('/')
@@ -960,9 +1006,100 @@ function App() {
   const sellerInputClasses =
     'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100'
 
-const handleForgotPassword = () => {
-  setMessage('Password reset instructions will be emailed to you shortly.')
-  dismissModals()
+const handleForgotPassword = async () => {
+  try {
+    const email = forms.login.email || forms.signup.email
+    if (!email) {
+      setMessage('Enter your email to reset your password.')
+      return
+    }
+    await fetchJSON('/api/auth/forgot-password', {
+      method: 'POST',
+      body: { email: email.trim().toLowerCase() },
+    })
+    setMessage('If an account exists, a reset email has been sent.')
+  } catch (error) {
+    setMessage(error.message || 'Unable to start password reset.')
+  } finally {
+    dismissModals()
+  }
+}
+
+const handleVerifySubmit = async (event) => {
+  event.preventDefault()
+  const email = verifyForm.email.trim().toLowerCase()
+  const token = verifyForm.token.trim()
+  if (!email || !token) {
+    setMessage('Add your email and verification code.')
+    return
+  }
+  try {
+    setIsVerifySubmitting(true)
+    const data = await fetchJSON('/api/auth/verify-email', {
+      method: 'POST',
+      body: { email, token },
+    })
+    if (data?.user && data?.token) {
+      persistAuth(data.token, data.user, data.refreshToken)
+      setMessage('Email verified. Welcome!')
+    } else {
+      setMessage('Email verified.')
+    }
+    navigate('/')
+  } catch (error) {
+    setMessage(error.message || 'Unable to verify email.')
+  } finally {
+    setIsVerifySubmitting(false)
+  }
+}
+
+const handleResendVerification = async () => {
+  const email = verifyForm.email.trim().toLowerCase() || forms.signup.email || forms.login.email
+  if (!email) {
+    setMessage('Enter your email to resend verification.')
+    return
+  }
+  try {
+    setIsVerifySubmitting(true)
+    await fetchJSON('/api/auth/resend-verification', {
+      method: 'POST',
+      body: { email },
+    })
+    setMessage('If an account exists, a verification email has been sent.')
+  } catch (error) {
+    setMessage(error.message || 'Unable to resend verification.')
+  } finally {
+    setIsVerifySubmitting(false)
+  }
+}
+
+const handleResetSubmit = async (event) => {
+  event.preventDefault()
+  const email = resetForm.email.trim().toLowerCase()
+  const token = resetForm.token.trim()
+  const password = resetForm.password
+  if (!email || !token || !password) {
+    setMessage('Add email, code, and new password.')
+    return
+  }
+  if (password.length < 8) {
+    setMessage('Password must be at least 8 characters.')
+    return
+  }
+  try {
+    setIsResetSubmitting(true)
+    await fetchJSON('/api/auth/reset-password', {
+      method: 'POST',
+      body: { email, token, password },
+    })
+    setMessage('Password updated. Please sign in.')
+    navigate('/')
+    setShowLoginModal(true)
+  } catch (error) {
+    setMessage(error.message || 'Unable to reset password.')
+  } finally {
+    setIsResetSubmitting(false)
+  }
 }
 
 const openLoginModal = () => {
@@ -1307,6 +1444,147 @@ const openSignupModal = () => {
             onOpenSellerTools={goToSellerTools}
             onOpenChatFromGig={handleOpenChatFromGig}
           />
+        )}
+
+        {view === 'verify-email' && (
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
+                Verify your email
+              </p>
+              <h2 className="text-2xl font-semibold text-slate-900">Confirm it&apos;s you</h2>
+              <p className="text-sm text-slate-600">
+                Paste the code from your email to activate your account.
+              </p>
+            </div>
+            <form className="mt-5 grid gap-3 sm:grid-cols-2" onSubmit={handleVerifySubmit}>
+              <div className="space-y-2 sm:col-span-1">
+                <label className="text-xs font-semibold uppercase text-slate-600">Email</label>
+                <input
+                  className={inputClasses}
+                  type="email"
+                  placeholder="you@example.com"
+                  value={verifyForm.email}
+                  onChange={(e) =>
+                    setVerifyForm((prev) => ({ ...prev, email: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-1">
+                <label className="text-xs font-semibold uppercase text-slate-600">
+                  Verification code
+                </label>
+                <input
+                  className={inputClasses}
+                  type="text"
+                  placeholder="Paste code"
+                  value={verifyForm.token}
+                  onChange={(e) =>
+                    setVerifyForm((prev) => ({ ...prev, token: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="sm:col-span-2 flex flex-wrap gap-3">
+                <Button
+                  type="submit"
+                  className="bg-purple-600 text-white hover:bg-purple-500"
+                  disabled={isVerifySubmitting}
+                >
+                  {isVerifySubmitting ? 'Verifying...' : 'Verify email'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-slate-200 text-slate-700 hover:bg-slate-50"
+                  onClick={handleResendVerification}
+                  disabled={isVerifySubmitting}
+                >
+                  Resend code
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-slate-700"
+                  onClick={() => navigate('/')}
+                >
+                  Back to dashboard
+                </Button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {view === 'reset-password' && (
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
+                Reset password
+              </p>
+              <h2 className="text-2xl font-semibold text-slate-900">Choose a new password</h2>
+              <p className="text-sm text-slate-600">
+                Use the link we emailed you to reset your account password.
+              </p>
+            </div>
+            <form className="mt-5 grid gap-3 sm:grid-cols-2" onSubmit={handleResetSubmit}>
+              <div className="space-y-2 sm:col-span-1">
+                <label className="text-xs font-semibold uppercase text-slate-600">Email</label>
+                <input
+                  className={inputClasses}
+                  type="email"
+                  placeholder="you@example.com"
+                  value={resetForm.email}
+                  onChange={(e) =>
+                    setResetForm((prev) => ({ ...prev, email: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-1">
+                <label className="text-xs font-semibold uppercase text-slate-600">
+                  Reset code
+                </label>
+                <input
+                  className={inputClasses}
+                  type="text"
+                  placeholder="Paste code"
+                  value={resetForm.token}
+                  onChange={(e) =>
+                    setResetForm((prev) => ({ ...prev, token: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <label className="text-xs font-semibold uppercase text-slate-600">
+                  New password
+                </label>
+                <input
+                  className={inputClasses}
+                  type="password"
+                  placeholder="At least 8 characters"
+                  value={resetForm.password}
+                  onChange={(e) =>
+                    setResetForm((prev) => ({ ...prev, password: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="sm:col-span-2 flex flex-wrap gap-3">
+                <Button
+                  type="submit"
+                  className="bg-purple-600 text-white hover:bg-purple-500"
+                  disabled={isResetSubmitting}
+                >
+                  {isResetSubmitting ? 'Saving...' : 'Update password'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-slate-700"
+                  onClick={() => navigate('/')}
+                >
+                  Back to dashboard
+                </Button>
+              </div>
+            </form>
+          </section>
         )}
 
 

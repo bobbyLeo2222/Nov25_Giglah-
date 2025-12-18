@@ -1,4 +1,6 @@
 import jwt from 'jsonwebtoken'
+import RefreshToken from '../models/RefreshToken.js'
+import { verifyAccessToken } from '../utils/tokens.js'
 
 export const authRequired = (req, res, next) => {
   if (!process.env.JWT_SECRET) {
@@ -13,7 +15,7 @@ export const authRequired = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const decoded = verifyAccessToken(token)
     req.user = decoded
     return next()
   } catch (error) {
@@ -27,11 +29,22 @@ export const optionalAuth = (req, res, next) => {
 
   if (token && process.env.JWT_SECRET) {
     try {
-      req.user = jwt.verify(token, process.env.JWT_SECRET)
+      req.user = verifyAccessToken(token)
     } catch (error) {
       // Ignore invalid tokens for optional paths
     }
   }
 
   next()
+}
+
+export const refreshAuth = async (req, res, next) => {
+  const token = req.body?.refreshToken || req.cookies?.refreshToken || ''
+  if (!token) return res.status(401).json({ message: 'Refresh token required' })
+  const existing = await RefreshToken.findOne({ token, revokedAt: null })
+  if (!existing || existing.expiresAt < new Date()) {
+    return res.status(401).json({ message: 'Invalid or expired refresh token' })
+  }
+  req.refreshToken = existing
+  return next()
 }
