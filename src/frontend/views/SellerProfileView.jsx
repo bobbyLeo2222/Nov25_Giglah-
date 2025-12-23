@@ -14,6 +14,7 @@ function SellerProfileView({
   onSubmitReview,
   onReviewDraftChange,
   onOpenChatFromGig,
+  onOpenGigFromProfile,
 }) {
   if (!selectedSeller) {
     return (
@@ -27,6 +28,11 @@ function SellerProfileView({
       </section>
     )
   }
+
+  const numberFormatter = new Intl.NumberFormat('en-SG')
+  const projectsCount = numberFormatter.format(selectedSeller.stats?.projects ?? 0)
+  const responseTime = selectedSeller.stats?.response || '—'
+  const repeatClients = selectedSeller.stats?.repeat || '—'
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
@@ -59,11 +65,7 @@ function SellerProfileView({
             </div>
           </div>
           <div className="hidden flex-wrap items-center gap-2 sm:flex">
-            <Button
-              variant="outline"
-              className="text-sm text-slate-600"
-              onClick={onBackToDashboard}
-            >
+            <Button variant="outline" className="text-sm text-slate-600" onClick={onBackToDashboard}>
               Back
             </Button>
             <Button
@@ -114,22 +116,22 @@ function SellerProfileView({
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  {sellerRatingSummary.count} review{sellerRatingSummary.count === 1 ? '' : 's'}
+                  {numberFormatter.format(sellerRatingSummary.count)} review{sellerRatingSummary.count === 1 ? '' : 's'}
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
                 <p className="text-xs font-semibold text-slate-500">Projects</p>
-                <p className="text-2xl font-semibold text-slate-900">{selectedSeller.stats?.projects ?? 0}</p>
+                <p className="text-2xl font-semibold text-slate-900">{projectsCount}</p>
                 <p className="text-xs text-slate-500">Completed engagements</p>
               </div>
               <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
                 <p className="text-xs font-semibold text-slate-500">Response time</p>
-                <p className="text-2xl font-semibold text-slate-900">{selectedSeller.stats?.response || '—'}</p>
+                <p className="text-2xl font-semibold text-slate-900">{responseTime}</p>
                 <p className="text-xs text-slate-500">Avg first reply</p>
               </div>
               <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
                 <p className="text-xs font-semibold text-slate-500">Repeat clients</p>
-                <p className="text-2xl font-semibold text-slate-900">{selectedSeller.stats?.repeat || '—'}</p>
+                <p className="text-2xl font-semibold text-slate-900">{repeatClients}</p>
                 <p className="text-xs text-slate-500">Based on past projects</p>
               </div>
             </div>
@@ -162,53 +164,60 @@ function SellerProfileView({
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-3xl border border-slate-100 bg-gradient-to-br from-purple-100 via-slate-50 to-white shadow-inner">
-            <div className="h-60 w-full overflow-hidden">
-              <img
-                src={selectedSeller.heroImage}
-                alt={`${selectedSeller.name} portfolio`}
-                className="h-full w-full object-cover"
-              />
+          <div className="rounded-3xl border border-slate-100 bg-gradient-to-br from-purple-100 via-slate-50 to-white p-5 shadow-inner">
+            <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Availability</p>
+            <p className="mt-2 text-sm text-slate-700">
+              {selectedSeller.availability || 'Update availability so buyers can plan with you.'}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              {sellerPortfolio.slice(0, 3).map((gig) => (
+                <span key={gig.id} className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700">
+                  {gig.title}
+                </span>
+              ))}
+              {sellerPortfolio.length === 0 && (
+                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-500">
+                  No gigs listed yet
+                </span>
+              )}
             </div>
-            <div className="space-y-3 px-5 py-4">
-              <p className="text-sm font-semibold text-slate-900">Booking summary</p>
-              <p className="text-sm text-slate-600">
-                {selectedSeller.availability || 'Share when you are free this month.'}
-              </p>
-              <div className="flex flex-wrap gap-2 text-xs">
-                {sellerPortfolio.slice(0, 3).map((gig) => (
-                  <span key={gig.id} className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700">
-                    {gig.title}
-                  </span>
-                ))}
-                {sellerPortfolio.length === 0 && (
-                  <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-500">
-                    No gigs listed yet
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {selectedSeller.socials?.website && (
-                  <a
-                    href={selectedSeller.socials.website}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-purple-200 hover:text-purple-700"
-                  >
-                    Website
-                  </a>
-                )}
-                {selectedSeller.socials?.instagram && (
-                  <a
-                    href={selectedSeller.socials.instagram}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-purple-200 hover:text-purple-700"
-                  >
-                    Instagram
-                  </a>
-                )}
-              </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {selectedSeller.socials?.website && (
+                <a
+                  href={selectedSeller.socials.website}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-purple-200 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-white"
+                >
+                  Website
+                </a>
+              )}
+              {selectedSeller.socials?.instagram && (
+                <a
+                  href={selectedSeller.socials.instagram}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-purple-200 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-white"
+                >
+                  Instagram
+                </a>
+              )}
+              <Button
+                type="button"
+                className="bg-purple-600 text-white hover:bg-purple-500"
+                onClick={() =>
+                  onOpenChatFromGig(
+                    sellerPortfolio[0] || {
+                      id: `GL-${selectedSeller.id}`,
+                      title: selectedSeller.headline,
+                      seller: selectedSeller.name,
+                      sellerId: selectedSeller.id,
+                    },
+                  )
+                }
+              >
+                Message seller
+              </Button>
             </div>
           </div>
         </div>
@@ -243,14 +252,24 @@ function SellerProfileView({
                   <span className="text-base font-semibold text-slate-900">
                     {gig.price ? formatter.format(gig.price) : 'Ask for quote'}
                   </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                    onClick={() => onOpenChatFromGig(gig)}
-                  >
-                    Enquire
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-slate-200 text-slate-800 hover:bg-slate-50"
+                      onClick={() => onOpenGigFromProfile?.(gig)}
+                    >
+                      View gig
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                      onClick={() => onOpenChatFromGig(gig)}
+                    >
+                      Enquire
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}

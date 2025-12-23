@@ -43,6 +43,7 @@ function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(false)
   const [user, setUser] = useState(null)
   const [gigs, setGigs] = useState([])
+  const [totalGigs, setTotalGigs] = useState(0)
   const [gigMedia, setGigMedia] = useState([])
   const [isUploadingMedia, setIsUploadingMedia] = useState(false)
   const [newGig, setNewGig] = useState({
@@ -50,6 +51,13 @@ function App() {
     category: '',
     price: '',
     description: '',
+    packages: [],
+  })
+  const [gigErrors, setGigErrors] = useState({
+    title: '',
+    category: '',
+    price: '',
+    packages: '',
   })
   const [message, setMessage] = useState('')
   const [showLoginPassword, setShowLoginPassword] = useState(false)
@@ -74,6 +82,15 @@ function App() {
   const [activeCategory, setActiveCategory] = useState('')
   const [isLoadingData, setIsLoadingData] = useState(false)
   const [dataError, setDataError] = useState('')
+  const [gigFilters, setGigFilters] = useState({
+    search: '',
+    category: '',
+    minPrice: '',
+    maxPrice: '',
+    sort: 'newest',
+    page: 1,
+    pageSize: 12,
+  })
   const authedFetch = (path, options = {}) => fetchJSON(path, { ...options, token: authToken })
   const persistAuth = (token, apiUser) => {
     setAuthToken(token || '')
@@ -144,6 +161,11 @@ function App() {
     () => [...chatThreads].sort((a, b) => (b.lastUpdatedAt || 0) - (a.lastUpdatedAt || 0)),
     [chatThreads],
   )
+
+  const totalGigPages = useMemo(() => {
+    const size = Number(gigFilters.pageSize) || 1
+    return Math.max(1, Math.ceil((totalGigs || 0) / size))
+  }, [gigFilters.pageSize, totalGigs])
 
   const userSellerId = useMemo(
     () => (user ? buildSellerId(user.email || user.name || '') : ''),
@@ -291,32 +313,52 @@ function App() {
   }, [authToken])
 
   useEffect(() => {
-    const loadMarketplace = async () => {
+    const loadProfiles = async () => {
+      try {
+        const profileData = await fetchJSON('/api/profiles')
+        const normalizedProfiles = (profileData?.profiles || []).map(normalizeProfile)
+        setSellerProfiles(normalizedProfiles)
+        const fallbackSellerId = normalizedProfiles[0]?.id || ''
+        setSelectedSellerId((prev) => prev || fallbackSellerId)
+      } catch (error) {
+        console.error('Failed to load profiles', error)
+        setDataError('Unable to load marketplace data from the API.')
+        setMessage('Unable to load marketplace data from the API.')
+      }
+    }
+    loadProfiles()
+  }, [])
+
+  useEffect(() => {
+    const loadGigs = async () => {
       setIsLoadingData(true)
       setDataError('')
       try {
-        const [gigData, profileData] = await Promise.all([
-          fetchJSON('/api/gigs'),
-          fetchJSON('/api/profiles'),
-        ])
+        const params = new URLSearchParams()
+        if (gigFilters.search) params.set('search', gigFilters.search)
+        if (gigFilters.category) params.set('category', gigFilters.category)
+        if (gigFilters.minPrice) params.set('minPrice', gigFilters.minPrice)
+        if (gigFilters.maxPrice) params.set('maxPrice', gigFilters.maxPrice)
+        if (gigFilters.sort) params.set('sort', gigFilters.sort)
+        params.set('page', gigFilters.page)
+        params.set('pageSize', gigFilters.pageSize)
+        const gigData = await fetchJSON(`/api/gigs?${params.toString()}`)
         const normalizedGigs = (gigData?.gigs || []).map(normalizeGig)
-        const normalizedProfiles = (profileData?.profiles || []).map(normalizeProfile)
         setGigs(normalizedGigs)
-        setSellerProfiles(normalizedProfiles)
-        const fallbackSellerId =
-          normalizedProfiles[0]?.id || normalizedGigs[0]?.sellerId || ''
-        setSelectedSellerId((prev) => prev || fallbackSellerId)
+        setTotalGigs(gigData?.total || normalizedGigs.length)
+        if (!selectedSellerId && normalizedGigs[0]?.sellerId) {
+          setSelectedSellerId(normalizedGigs[0].sellerId)
+        }
       } catch (error) {
-        console.error('Failed to load marketplace data', error)
+        console.error('Failed to load gigs', error)
         setDataError('Unable to load marketplace data from the API.')
         setMessage('Unable to load marketplace data from the API.')
       } finally {
         setIsLoadingData(false)
       }
     }
-
-    loadMarketplace()
-  }, [])
+    loadGigs()
+  }, [gigFilters])
 
   useEffect(() => {
     if (!selectedSellerId) return undefined
@@ -396,6 +438,7 @@ function App() {
 
   const handleCategorySelect = (label) => {
     setActiveCategory(label)
+    setGigFilters((prev) => ({ ...prev, category: label, page: 1 }))
     setView('categories')
   }
 
@@ -411,6 +454,22 @@ function App() {
     setSelectedThreadId(threadId)
     setComposerText('')
     setComposerFiles([])
+  }
+
+  const handleGigFilterChange = (field, value) => {
+    setGigFilters((prev) => ({ ...prev, [field]: value, page: field === 'page' ? value : 1 }))
+  }
+
+  const handleClearGigFilters = () => {
+    setGigFilters((prev) => ({
+      ...prev,
+      search: '',
+      category: '',
+      minPrice: '',
+      maxPrice: '',
+      sort: 'newest',
+      page: 1,
+    }))
   }
 
   const handleComposerFiles = (event) => {
@@ -626,7 +685,36 @@ function App() {
 
   const handleGigChange = (field) => (event) => {
     const value = event.target.value
+    setGigErrors((prev) => ({ ...prev, [field]: '' }))
     setNewGig((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleAddPackage = () => {
+    setGigErrors((prev) => ({ ...prev, packages: '' }))
+    setNewGig((prev) => ({
+      ...prev,
+      packages: [
+        ...prev.packages,
+        { id: `pkg-${Date.now()}-${Math.random().toString(16).slice(2)}`, name: '', description: '', price: '' },
+      ],
+    }))
+  }
+
+  const handlePackageChange = (index, field, value) => {
+    setGigErrors((prev) => ({ ...prev, packages: '' }))
+    setNewGig((prev) => {
+      const packages = [...prev.packages]
+      packages[index] = { ...packages[index], [field]: value }
+      return { ...prev, packages }
+    })
+  }
+
+  const handleRemovePackage = (index) => {
+    setGigErrors((prev) => ({ ...prev, packages: '' }))
+    setNewGig((prev) => {
+      const packages = prev.packages.filter((_, pkgIndex) => pkgIndex !== index)
+      return { ...prev, packages }
+    })
   }
 
   const handleGigFiles = async (event) => {
@@ -678,9 +766,30 @@ function App() {
       setMessage('Create your seller profile before publishing gigs.')
       return
     }
-    const { title, category, price, description } = newGig
-    if (!title || !category || !price) {
-      setMessage('Add a title, category, and price.')
+    const { title, category, price, description, packages } = newGig
+    setGigErrors({ title: '', category: '', price: '', packages: '' })
+    const normalizedPackages = (packages || [])
+      .map((pkg) => ({
+        name: (pkg.name || '').trim(),
+        description: (pkg.description || '').trim(),
+        price: pkg.price === '' ? '' : Number(pkg.price),
+      }))
+      .filter((pkg) => pkg.name || pkg.description || Number.isFinite(pkg.price))
+    const packagePrices = normalizedPackages.map((pkg) => (Number.isFinite(pkg.price) ? pkg.price : 0))
+    const hasPackagePrice = packagePrices.some((value) => Number.isFinite(value) && value > 0)
+
+    const errors = { title: '', category: '', price: '', packages: '' }
+    if (!title || !category) {
+      errors.title = !title ? 'Enter a gig title.' : ''
+      errors.category = !category ? 'Pick a category.' : ''
+    }
+    if (!price && !hasPackagePrice) {
+      errors.price = 'Add a base price or set package pricing.'
+      errors.packages = 'Add at least one package price if base price is empty.'
+    }
+    if (Object.values(errors).some(Boolean)) {
+      setGigErrors(errors)
+      setMessage('Fix the highlighted fields before submitting your gig.')
       return
     }
     try {
@@ -691,15 +800,21 @@ function App() {
       })
       const primaryImage = gigMedia.find((item) => item.type === 'image')?.url || ''
       const ownerId = user?._id || user?.id || ''
+      const priceNumber = price ? Number(price) : 0
+      const lowestPackagePrice =
+        hasPackagePrice && packagePrices.length
+          ? Math.min(...packagePrices.filter((value) => Number.isFinite(value) && value > 0))
+          : 0
       const payload = {
         title: title.trim(),
         category: category.trim(),
-        price: Number(price),
+        price: priceNumber > 0 ? priceNumber : lowestPackagePrice,
         status: 'Published',
         description: description.trim() || 'Awaiting description.',
         ...(ownerId ? { owner: ownerId } : {}),
         media: mediaPayload,
         imageUrl: primaryImage,
+        packages: normalizedPackages,
       }
       const data = await authedFetch('/api/gigs', {
         method: 'POST',
@@ -709,13 +824,18 @@ function App() {
         const normalized = normalizeGig(data.gig)
         setGigs((prev) => [normalized, ...prev])
         ensureSellerProfile(normalized.sellerId, normalized.seller)
+        setSelectedGigId(normalized.id)
+        if (normalized.sellerId) setSelectedSellerId(normalized.sellerId)
+        setView('gig-detail')
       }
       setNewGig({
         title: '',
         category: '',
         price: '',
         description: '',
+        packages: [],
       })
+      setGigErrors({ title: '', category: '', price: '', packages: '' })
       setGigMedia([])
       setMessage('Gig published and visible on your dashboard.')
     } catch (error) {
@@ -996,10 +1116,15 @@ const openSignupModal = () => {
             onSelectCategory={handleCategorySelect}
             onShowAllCategories={() => setView('categories')}
             gigs={gigs}
+            totalGigs={totalGigs}
+            gigFilters={gigFilters}
+            totalPages={totalGigPages}
             formatter={formatter}
             onOpenSellerProfile={handleOpenSellerProfile}
             onOpenChat={handleOpenChatFromGig}
             onOpenGig={handleOpenGigDetail}
+            onGigFilterChange={handleGigFilterChange}
+            onClearGigFilters={handleClearGigFilters}
           />
         )}
 
@@ -1052,6 +1177,7 @@ const openSignupModal = () => {
             onSubmitReview={handleSubmitReview}
             onReviewDraftChange={handleReviewDraftChange}
             onOpenChatFromGig={handleOpenChatFromGig}
+            onOpenGigFromProfile={handleOpenGigDetail}
           />
         )}
 
@@ -1078,7 +1204,9 @@ const openSignupModal = () => {
             userGigCount={userGigCount}
             userSellerId={userSellerId}
             inputClasses={inputClasses}
+            categoryOptions={categoryLabels}
             newGig={newGig}
+            gigErrors={gigErrors}
             gigMedia={gigMedia}
             isUploadingMedia={isUploadingMedia}
             myGigs={myGigs}
@@ -1088,6 +1216,9 @@ const openSignupModal = () => {
             onOpenSignup={openSignupModal}
             onStartApplication={startSellerApplication}
             onGigChange={handleGigChange}
+            onAddPackage={handleAddPackage}
+            onPackageChange={handlePackageChange}
+            onRemovePackage={handleRemovePackage}
             onGigFiles={handleGigFiles}
             onRemoveGigMedia={handleRemoveGigMedia}
             onCreateGig={handleCreateGig}

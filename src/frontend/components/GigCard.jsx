@@ -6,6 +6,7 @@ function GigCard({ gig, index = 0, formatter, onOpenSellerProfile, onOpenChat, o
     gig.imageUrl || gig.media?.find((item) => item.type === 'image')?.url || ''
   const primaryVideo =
     !primaryImage && gig.media ? gig.media.find((item) => item.type === 'video') : null
+  const hasPackages = Array.isArray(gig.packages) && gig.packages.length > 0
 
   return (
     <article
@@ -58,7 +59,11 @@ function GigCard({ gig, index = 0, formatter, onOpenSellerProfile, onOpenChat, o
         <div className="mt-auto space-y-3">
           <div className="text-sm text-slate-500">
             <span className="text-base font-semibold text-slate-900">
-              {gig.price ? formatter.format(gig.price) : 'Pricing TBD'}
+              {gig.price
+                ? hasPackages
+                  ? `From ${formatter.format(gig.price)}`
+                  : formatter.format(gig.price)
+                : 'Pricing TBD'}
             </span>
           </div>
           <button

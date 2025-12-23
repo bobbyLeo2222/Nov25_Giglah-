@@ -24,6 +24,16 @@ const gigSchema = new mongoose.Schema(
       ],
       default: [],
     },
+    packages: {
+      type: [
+        {
+          name: { type: String, trim: true },
+          description: { type: String, trim: true },
+          price: { type: Number, default: 0 },
+        },
+      ],
+      default: [],
+    },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true },

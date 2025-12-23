@@ -5,7 +5,9 @@ function SellerGigCreateView({
   userGigCount,
   userSellerId,
   inputClasses,
+  categoryOptions = [],
   newGig,
+  gigErrors = {},
   gigMedia,
   isUploadingMedia,
   myGigs,
@@ -15,6 +17,9 @@ function SellerGigCreateView({
   onOpenSignup,
   onStartApplication,
   onGigChange,
+  onAddPackage,
+  onPackageChange,
+  onRemovePackage,
   onGigFiles,
   onRemoveGigMedia,
   onCreateGig,
@@ -98,26 +103,105 @@ function SellerGigCreateView({
         <div className="mt-6 space-y-6">
           <form className="space-y-4" onSubmit={onCreateGig}>
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                className={inputClasses}
-                placeholder="Gig title"
-                value={newGig.title}
-                onChange={onGigChange('title')}
-              />
-              <input
-                className={inputClasses}
-                placeholder="Category"
-                value={newGig.category}
-                onChange={onGigChange('category')}
-              />
+              <div className="space-y-1">
+                <input
+                  className={inputClasses}
+                  placeholder="Gig title"
+                  value={newGig.title}
+                  onChange={onGigChange('title')}
+                />
+                {gigErrors.title && <p className="text-xs font-semibold text-rose-600">{gigErrors.title}</p>}
+              </div>
+              <div className="space-y-1">
+                <select
+                  className={`${inputClasses} bg-white`}
+                  value={newGig.category}
+                  onChange={onGigChange('category')}
+                >
+                  <option value="">Select a category</option>
+                  {categoryOptions.map((label) => (
+                    <option key={label} value={label}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {gigErrors.category && <p className="text-xs font-semibold text-rose-600">{gigErrors.category}</p>}
+              </div>
             </div>
-            <input
-              type="number"
-              className={inputClasses}
-              placeholder="Price (SGD)"
-              value={newGig.price}
-              onChange={onGigChange('price')}
-            />
+            <div className="space-y-1">
+              <input
+                type="number"
+                className={inputClasses}
+                placeholder="Base price (SGD) — set if you have a single rate"
+                value={newGig.price}
+                onChange={onGigChange('price')}
+              />
+              {gigErrors.price && <p className="text-xs font-semibold text-rose-600">{gigErrors.price}</p>}
+            </div>
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Packages (optional)</p>
+                  <p className="text-xs text-slate-500">Add tiered offers with clear deliverables and prices.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                  onClick={onAddPackage}
+                >
+                  Add package
+                </Button>
+              </div>
+              {newGig.packages.length === 0 && (
+                <p className="text-xs text-slate-600">No packages yet. Add one to list multiple price points.</p>
+              )}
+              {gigErrors.packages && (
+                <p className="text-xs font-semibold text-rose-600">{gigErrors.packages}</p>
+              )}
+              {newGig.packages.length > 0 && (
+                <div className="space-y-3">
+                  {newGig.packages.map((pkg, index) => (
+                    <div
+                      key={pkg.id || index}
+                      className="rounded-xl border border-white/60 bg-white p-3 shadow-sm"
+                    >
+                      <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
+                        <input
+                          className={inputClasses}
+                          placeholder="Package name (e.g., Starter, Pro)"
+                          value={pkg.name}
+                          onChange={(event) => onPackageChange(index, 'name', event.target.value)}
+                        />
+                        <input
+                          type="number"
+                          className={inputClasses}
+                          placeholder="Price (SGD)"
+                          value={pkg.price}
+                          onChange={(event) => onPackageChange(index, 'price', event.target.value)}
+                        />
+                      </div>
+                      <textarea
+                        rows={3}
+                        className={`${inputClasses} mt-3 resize-none`}
+                        placeholder="What is included in this package?"
+                        value={pkg.description}
+                        onChange={(event) => onPackageChange(index, 'description', event.target.value)}
+                      />
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-rose-600 hover:underline"
+                          onClick={() => onRemovePackage(index)}
+                        >
+                          Remove package
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <textarea
               rows={4}
               className={`${inputClasses} resize-none`}

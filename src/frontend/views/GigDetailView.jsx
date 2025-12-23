@@ -33,6 +33,7 @@ function GigDetailView({
     gig.imageUrl || gig.media?.find((item) => item.type === 'image')?.url || ''
   const primaryVideo =
     !primaryImage && gig.media ? gig.media.find((item) => item.type === 'video') : null
+  const hasPackages = Array.isArray(gig.packages) && gig.packages.length > 0
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
@@ -83,7 +84,7 @@ function GigDetailView({
                 </div>
               )}
               <div className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 backdrop-blur">
-                {formatter.format(gig.price || 0)}
+                {hasPackages ? `From ${formatter.format(gig.price || 0)}` : formatter.format(gig.price || 0)}
               </div>
             </div>
             {gig.media?.length > 1 && (
@@ -115,6 +116,29 @@ function GigDetailView({
             <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">
               {gig.description || 'Describe what buyers get, scope, timelines, and deliverables for this gig.'}
             </p>
+            {hasPackages && (
+              <div className="mt-4 space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Packages</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {gig.packages.map((pkg, index) => (
+                    <div
+                      key={`${pkg.name}-${index}`}
+                      className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-900">{pkg.name}</p>
+                        <span className="text-sm font-semibold text-purple-700">
+                          {pkg.price ? formatter.format(pkg.price) : 'Custom'}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-700">
+                        {pkg.description || 'Include what this package covers.'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
               {gig.instagramUrl && (
                 <a

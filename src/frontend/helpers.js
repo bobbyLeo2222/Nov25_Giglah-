@@ -56,7 +56,20 @@ const normalizeGig = (gig) => ({
   seller: gig.sellerName || gig.seller || 'Seller',
   sellerId: gig.sellerId || gig.sellerProfile?.sellerId || gig.sellerProfile?._id || '',
   category: gig.category || '',
-  price: gig.price || 0,
+  packages: Array.isArray(gig.packages)
+    ? gig.packages.map((pkg) => ({
+        name: pkg.name || 'Package',
+        description: pkg.description || '',
+        price: Number(pkg.price) || 0,
+      }))
+    : [],
+  price: (() => {
+    const base = Number(gig.price) || 0
+    if (base > 0) return base
+    const packagePrices = (gig.packages || []).map((pkg) => Number(pkg.price) || 0)
+    const lowest = packagePrices.length ? Math.min(...packagePrices) : 0
+    return Number.isFinite(lowest) ? lowest : 0
+  })(),
   status: gig.status || 'Published',
   description: gig.description || '',
   owner: gig.owner || null,
