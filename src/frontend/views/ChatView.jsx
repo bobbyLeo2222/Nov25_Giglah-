@@ -16,6 +16,7 @@ function ChatView({
   onRemoveComposerFile,
   onSendMessage,
   onViewGig,
+  onTyping,
   user,
 }) {
   return (
@@ -66,7 +67,14 @@ function ChatView({
                       <p className="text-sm font-semibold text-slate-900">{thread.gigTitle}</p>
                       <p className="text-xs text-slate-500">{thread.sellerName}</p>
                     </div>
-                    <span className="text-xs text-slate-400">{timeAgo(thread.lastUpdatedAt)}</span>
+                    <div className="flex items-center gap-2">
+                      {thread.unreadCount > 0 && (
+                        <span className="rounded-full bg-purple-600 px-2 py-[2px] text-[10px] font-semibold text-white">
+                          {thread.unreadCount}
+                        </span>
+                      )}
+                      <span className="text-xs text-slate-400">{timeAgo(thread.lastUpdatedAt)}</span>
+                    </div>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
                     {lastMessage
@@ -75,6 +83,9 @@ function ChatView({
                         'Shared an attachment'
                       : 'No messages yet'}
                   </p>
+                  {thread.typingStatuses?.length ? (
+                    <p className="mt-1 text-[11px] font-semibold text-purple-600">Typing...</p>
+                  ) : null}
                 </button>
               )
             })}
@@ -108,7 +119,8 @@ function ChatView({
                   </p>
                 )}
                 {selectedThread.messages.map((msg) => {
-                  const isOwn = msg.senderRole === (user?.isSeller ? 'seller' : 'buyer')
+              const currentUserId = user?._id || user?.id
+              const isOwn = currentUserId ? msg.senderId === currentUserId : false
                   return (
                     <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
                       <div
@@ -128,21 +140,49 @@ function ChatView({
                         </div>
                         {msg.text && <p className="mt-1 whitespace-pre-line">{msg.text}</p>}
                         {msg.attachments?.length > 0 && (
-                          <div className="mt-2 space-y-1 text-xs">
-                            {msg.attachments.map((file) => (
-                              <div
-                                key={file.id}
-                                className={`flex items-center gap-2 rounded-lg px-2 py-1 ${
-                                  isOwn ? 'bg-purple-500/40 text-white' : 'bg-slate-100 text-slate-700'
-                                }`}
-                              >
-                                <span className="font-semibold">{file.name}</span>
-                                <span className={isOwn ? 'text-white/80' : 'text-slate-500'}>
-                                  {file.sizeLabel}
-                                </span>
-                              </div>
-                            ))}
+                          <div className="mt-2 space-y-2 text-xs">
+                            {msg.attachments.map((file) => {
+                              const isImage = file.type?.startsWith?.('image/')
+                              const preview = file.previewUrl || file.url || ''
+                              return (
+                                <div
+                                  key={file.id}
+                                  className={`flex items-center gap-2 rounded-lg px-2 py-1 ${
+                                    isOwn ? 'bg-purple-500/40 text-white' : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {isImage && preview ? (
+                                    <img
+                                      src={preview}
+                                      alt={file.name}
+                                      className="h-12 w-12 shrink-0 rounded object-cover"
+                                    />
+                                  ) : null}
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="truncate font-semibold">{file.name}</span>
+                                      <span className={isOwn ? 'text-white/80' : 'text-slate-500'}>
+                                        {file.sizeLabel}
+                                      </span>
+                                    </div>
+                                    {preview ? (
+                                      <a
+                                        href={preview}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className={isOwn ? 'text-white/80 underline' : 'text-slate-500 underline'}
+                                      >
+                                        View attachment
+                                      </a>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              )
+                            })}
                           </div>
+                        )}
+                        {msg.readBy?.length > 0 && isOwn && (
+                          <p className="mt-2 text-[10px] font-semibold text-white/80">Seen</p>
                         )}
                       </div>
                     </div>
@@ -153,22 +193,32 @@ function ChatView({
               <form className="mt-3 space-y-3" onSubmit={onSendMessage}>
                 {composerFiles.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {composerFiles.map((file) => (
-                      <span
-                        key={file.id}
-                        className="flex items-center gap-2 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700"
-                      >
-                        {file.name} ({file.sizeLabel})
-                        <button
-                          type="button"
-                          className="text-slate-500 transition hover:text-slate-700"
-                          onClick={() => onRemoveComposerFile?.(file.id)}
-                          aria-label={`Remove ${file.name}`}
+                    {composerFiles.map((file) => {
+                      const isImage = file.type?.startsWith?.('image/')
+                      return (
+                        <span
+                          key={file.id}
+                          className="flex items-center gap-2 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700"
                         >
-                          A-
-                        </button>
-                      </span>
-                    ))}
+                          {isImage && file.previewUrl ? (
+                            <img
+                              src={file.previewUrl}
+                              alt={file.name}
+                              className="h-8 w-8 rounded object-cover"
+                            />
+                          ) : null}
+                          {file.name} ({file.sizeLabel})
+                          <button
+                            type="button"
+                            className="text-slate-500 transition hover:text-slate-700"
+                            onClick={() => onRemoveComposerFile?.(file.id)}
+                            aria-label={`Remove ${file.name}`}
+                          >
+                            A-
+                          </button>
+                        </span>
+                      )
+                    })}
                   </div>
                 )}
                 <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-sm">
@@ -176,7 +226,10 @@ function ChatView({
                     className="h-10 flex-1 rounded-full border-none bg-transparent px-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
                     placeholder="Write a message..."
                     value={composerText}
-                    onChange={(event) => onComposerChange?.(event.target.value)}
+                    onChange={(event) => {
+                      onComposerChange?.(event.target.value)
+                      onTyping?.()
+                    }}
                   />
                   <label className="flex cursor-pointer items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100">
                     <span>Attach</span>

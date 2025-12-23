@@ -1,5 +1,5 @@
 const formatFileSize = (bytes) => {
-  if (!bytes && bytes !== 0) return '0 KB'
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB'
   const sizes = ['B', 'KB', 'MB', 'GB']
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1)
   const sized = bytes / Math.pow(1024, index)
@@ -52,8 +52,16 @@ const normalizeGigMedia = (media = []) => {
 
 const normalizeGig = (gig) => {
   const rawSeller = gig.seller
-  const sellerUserId =
-    typeof rawSeller === 'string' && /^[a-f0-9]{24}$/i.test(rawSeller) ? rawSeller : ''
+  let sellerUserId = ''
+  if (typeof rawSeller === 'string' && /^[a-f0-9]{24}$/i.test(rawSeller)) {
+    sellerUserId = rawSeller
+  } else if (rawSeller?._id) {
+    sellerUserId = rawSeller._id.toString()
+  } else if (rawSeller?.toString) {
+    const maybe = rawSeller.toString()
+    sellerUserId = /^[a-f0-9]{24}$/i.test(maybe) ? maybe : ''
+  }
+
   return {
     id: gig._id || gig.id,
     title: gig.title,
@@ -96,6 +104,23 @@ const normalizeReview = (review) => ({
   createdAt: review.createdAt ? new Date(review.createdAt).getTime() : Date.now(),
 })
 
+const normalizeMessage = (msg) => ({
+  id: msg._id || msg.id,
+  senderId: msg.sender?._id || msg.sender?.id || msg.sender,
+  senderName: msg.senderName || msg.sender?.name || 'Member',
+  senderRole: msg.senderRole || 'buyer',
+  text: msg.text || '',
+  sentAt: msg.createdAt ? new Date(msg.createdAt).getTime() : msg.sentAt || Date.now(),
+  attachments: (msg.files || msg.attachments || []).map((file, index) => ({
+    id: file.id || `${msg._id || msg.id || 'file'}-${index}`,
+    name: file.name || 'Attachment',
+    sizeLabel: file.sizeLabel || formatFileSize(file.size || 0),
+    type: file.type || 'file',
+    url: file.url || '',
+  })),
+  readBy: (msg.readBy || []).map((id) => (typeof id === 'string' ? id : id?._id || id?.id)),
+})
+
 const mapUserFromApi = (apiUser) =>
   apiUser ? { ...apiUser, isSeller: apiUser.role === 'seller' } : null
 
@@ -108,6 +133,7 @@ export {
   mapUserFromApi,
   normalizeGig,
   normalizeGigMedia,
+  normalizeMessage,
   normalizeProfile,
   normalizeReview,
   timeAgo,

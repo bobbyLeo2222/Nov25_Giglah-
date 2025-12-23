@@ -83,6 +83,7 @@ function App() {
   const [reviewDraft, setReviewDraft] = useState({ rating: 5, text: '', project: '' })
   const [currentServiceSlide, setCurrentServiceSlide] = useState(0)
   const [chatThreads, setChatThreads] = useState([])
+  const [unreadTotal, setUnreadTotal] = useState(0)
   const [selectedThreadId, setSelectedThreadId] = useState('')
   const [composerText, setComposerText] = useState('')
   const [composerFiles, setComposerFiles] = useState([])
@@ -468,18 +469,40 @@ function App() {
           participant,
         ]),
       )
+      const sellerId = thread.seller?._id?.toString?.() || thread.seller?.toString?.() || ''
+      const buyerId = thread.buyer?._id?.toString?.() || thread.buyer?.toString?.() || ''
       const sellerParticipant =
-        participants.find((participant) => participant.role === 'seller') || null
+        participants.find((participant) => {
+          const pid = participant._id?.toString() || participant.id
+          return pid === sellerId || participant.role === 'seller'
+        }) || null
       const buyerParticipant =
-        participants.find((participant) => participant.role !== 'seller') || null
+        participants.find((participant) => {
+          const pid = participant._id?.toString() || participant.id
+          return pid === buyerId || participant.role === 'buyer'
+        }) || null
+
       const messages = (thread.messages || []).map((msg, index) => {
         const senderId = msg.sender?._id?.toString() || msg.sender?.toString() || ''
         const sender = senderId ? participantMap.get(senderId) : null
-        const senderRole = sender?.role === 'seller' ? 'seller' : 'buyer'
+        const senderRole =
+          senderId && senderId === sellerId
+            ? 'seller'
+            : senderId && senderId === buyerId
+              ? 'buyer'
+              : sender?.role === 'seller'
+                ? 'seller'
+                : 'buyer'
+        const senderName =
+          sender?.name ||
+          (senderRole === 'seller'
+            ? thread.sellerName || sellerParticipant?.name || 'Seller'
+            : thread.buyerName || buyerParticipant?.name || 'Buyer')
         return {
           id: msg._id || msg.id || `msg-${index}-${Date.now()}`,
           senderRole,
-          senderName: sender?.name || 'Member',
+          senderId: senderId || undefined,
+          senderName,
           text: msg.text || '',
           sentAt: msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now(),
           attachments: (msg.files || []).map((file, fileIndex) => ({
@@ -494,23 +517,32 @@ function App() {
 
       return {
         id: thread._id || thread.id,
-        gigId,
-        gigTitle: gigTitle || thread.title || 'Conversation',
-        sellerName: sellerParticipant?.name || 'Seller',
-        buyerName: buyerParticipant?.name || '',
+        gigId: thread.gigId || gigId,
+        gigTitle: thread.gigTitle || gigTitle || thread.title || 'Conversation',
+        sellerUserId: sellerId,
+        buyerUserId: buyerId,
+        sellerName: thread.sellerName || sellerParticipant?.name || 'Seller',
+        buyerName: thread.buyerName || buyerParticipant?.name || 'Buyer',
         buyerEmail: buyerParticipant?.email || '',
         lastUpdatedAt: thread.lastMessageAt
           ? new Date(thread.lastMessageAt).getTime()
           : messages[messages.length - 1]?.sentAt || Date.now(),
         messages,
+        unreadCount:
+          thread.unreadCount ??
+          messages.filter(
+            (msg) => !(msg.readBy || []).some((id) => id === (user?._id || user?.id)),
+          ).length,
+        typingStatuses: (thread.typingStatuses || []).map((entry) => entry.user?.toString?.() || entry.user),
       }
     },
-    [formatFileSize],
+    [formatFileSize, user],
   )
 
   useEffect(() => {
     if (!user || !authToken) {
       setChatThreads([])
+      setUnreadTotal(0)
       return
     }
     let cancelled = false
@@ -519,6 +551,8 @@ function App() {
         if (cancelled) return
         const normalized = (data?.threads || []).map(normalizeThread).filter(Boolean)
         setChatThreads(normalized)
+        const total = normalized.reduce((sum, thread) => sum + (thread.unreadCount || 0), 0)
+        setUnreadTotal(total)
       })
       .catch((error) => {
         console.error('Failed to load chats', error)
@@ -539,6 +573,12 @@ function App() {
         setChatThreads((prev) => {
           const others = prev.filter((thread) => thread.id !== normalized.id)
           return [normalized, ...others]
+        })
+        setUnreadTotal((prev) => {
+          const others = chatThreads
+            .filter((thread) => thread.id !== normalized.id)
+            .reduce((sum, thread) => sum + (thread.unreadCount || 0), 0)
+          return others + (normalized.unreadCount || 0)
         })
       })
       .catch((error) => {
@@ -626,24 +666,104 @@ function App() {
     setComposerText('')
     setComposerFiles([])
     navigate(threadId ? `/chats/${threadId}` : '/chats')
+    if (threadId && user && authToken) {
+      authedFetch(`/api/chats/${threadId}/read`, { method: 'POST' }).catch(() => {})
+      setChatThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === threadId ? { ...thread, unreadCount: 0 } : thread,
+        ),
+      )
+      setUnreadTotal((prev) => {
+        const target = chatThreads.find((t) => t.id === threadId)
+        return prev - (target?.unreadCount || 0)
+      })
+    }
   }
 
-  const handleComposerFiles = (event) => {
+  const readFileAsDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result || '')
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsDataURL(file)
+    })
+
+  const handleComposerFiles = async (event) => {
     const files = Array.from(event.target.files || [])
     if (files.length === 0) return
-    const mapped = files.map((file) => ({
-      id: `${Date.now()}-${file.name}-${Math.random().toString(16).slice(2)}`,
-      name: file.name,
-      type: file.type || 'application/octet-stream',
-      sizeLabel: formatFileSize(file.size || 0),
-      previewUrl: file.type?.startsWith('image/') ? URL.createObjectURL(file) : '',
-    }))
-    setComposerFiles((prev) => [...prev, ...mapped])
-    event.target.value = ''
+    try {
+      const mapped = await Promise.all(
+        files.map(async (file) => {
+          const dataUrl = await readFileAsDataUrl(file)
+          return {
+            id: `${Date.now()}-${file.name}-${Math.random().toString(16).slice(2)}`,
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            size: file.size || 0,
+            sizeLabel: formatFileSize(file.size || 0),
+            previewUrl: dataUrl,
+          }
+        }),
+      )
+      setComposerFiles((prev) => [...prev, ...mapped])
+    } catch (error) {
+      console.error('Failed to read attachment', error)
+      setMessage('Unable to preview attachment.')
+    } finally {
+      event.target.value = ''
+    }
   }
 
   const handleRemoveComposerFile = (fileId) => {
     setComposerFiles((prev) => prev.filter((file) => file.id !== fileId))
+  }
+
+  const ensureThreadForGig = async (gig, { forceCreate = false } = {}) => {
+    if (!gig) throw new Error('Seller information is missing for this gig.')
+    if (!user || !authToken) throw new Error('Log in to message the seller.')
+
+    const sellerParticipantId = gig.sellerUserId || gig.owner || gig.sellerId || ''
+    if (!sellerParticipantId) throw new Error('Seller account is missing for this gig.')
+
+    const buyerId = user._id || user.id
+    const existingThread = !forceCreate
+      ? chatThreads.find((thread) => thread.gigId === gig.id)
+      : null
+    if (existingThread) return existingThread
+
+    const threadTitle = buildThreadTitleFromGig(gig)
+    const participantIds = [buyerId, sellerParticipantId].filter(Boolean)
+    const created = await authedFetch('/api/chats', {
+      method: 'POST',
+      body: {
+        participantIds,
+        title: threadTitle,
+        gigId: gig.id,
+        gigTitle: gig.title,
+        sellerId: sellerParticipantId,
+        buyerId,
+        sellerName: gig.seller || 'Seller',
+        buyerName: user.name || 'Buyer',
+      },
+    })
+
+    const threadId = created?.thread?._id || created?.thread?.id
+    let normalized = null
+    if (threadId) {
+      const fetched = await authedFetch(`/api/chats/${threadId}`)
+      normalized = normalizeThread(fetched?.thread || created.thread)
+    } else if (created?.thread) {
+      normalized = normalizeThread(created.thread)
+    }
+
+    if (!normalized) throw new Error('Unable to open chat.')
+
+    setChatThreads((prev) => [
+      normalized,
+      ...prev.filter((thread) => thread.id !== normalized.id),
+    ])
+
+    return normalized
   }
 
   const handleSendMessage = async (event) => {
@@ -662,19 +782,52 @@ function App() {
       setMessage('Type a message or attach a file first.')
       return
     }
-    try {
-      const data = await authedFetch(`/api/chats/${selectedThread.id}/messages`, {
+
+    const payload = {
+      text,
+      files: composerFiles.map((file) => ({
+        name: file.name,
+        type: file.type,
+        size: file.size || 0,
+        url: file.previewUrl || '',
+      })),
+      gigId: selectedThread.gigId || selectedGig?.id || '',
+      gigTitle: selectedThread.gigTitle || selectedGig?.title || '',
+      sellerId:
+        selectedThread.sellerUserId ||
+        selectedGig?.sellerUserId ||
+        selectedGig?.owner ||
+        selectedGig?.sellerId ||
+        '',
+      buyerId: user._id || user.id,
+      sellerName: selectedThread.sellerName || selectedGig?.seller || 'Seller',
+      buyerName: user.name || 'Buyer',
+      participantIds: [
+        selectedThread.sellerUserId ||
+          selectedGig?.sellerUserId ||
+          selectedGig?.owner ||
+          selectedGig?.sellerId ||
+          '',
+      ].filter(Boolean),
+    }
+
+    const postMessage = (threadId) =>
+      authedFetch(`/api/chats/${threadId}/messages`, {
         method: 'POST',
-        body: {
-          text,
-          files: [],
-        },
+        body: payload,
       })
+
+    const appendMessageToThread = (threadId, data) => {
       const now = Date.now()
       const newMessage = data?.message
         ? {
             id: data.message._id || data.message.id || `msg-${now}`,
             senderRole: user?.isSeller ? 'seller' : 'buyer',
+            senderId:
+              data.message.sender?._id?.toString?.() ||
+              data.message.sender?.toString?.() ||
+              user?._id ||
+              user?.id,
             senderName: user?.name || 'Member',
             text: data.message.text || text,
             sentAt: data.message.createdAt ? new Date(data.message.createdAt).getTime() : now,
@@ -684,11 +837,13 @@ function App() {
               type: file.type || 'file',
               sizeLabel: formatFileSize(file.size || 0),
               previewUrl: file.url || '',
+              url: file.url || '',
             })),
           }
         : {
             id: `msg-${now}`,
             senderRole: user?.isSeller ? 'seller' : 'buyer',
+            senderId: user?._id || user?.id,
             senderName: user?.name || 'Member',
             text,
             sentAt: now,
@@ -698,20 +853,59 @@ function App() {
               type: file.type,
               sizeLabel: file.sizeLabel,
               previewUrl: file.previewUrl,
+              url: file.previewUrl,
             })),
           }
+
       setChatThreads((prev) =>
         prev.map((thread) =>
-          thread.id === selectedThread.id
+          thread.id === threadId
             ? { ...thread, lastUpdatedAt: newMessage.sentAt, messages: [...thread.messages, newMessage] }
             : thread,
         ),
       )
+      setUnreadTotal((prev) => prev) // sender's own message shouldn't change unread total
       setComposerText('')
       setComposerFiles([])
       setMessage('Message sent.')
+    }
+
+    try {
+      const data = await postMessage(selectedThread.id)
+      appendMessageToThread(selectedThread.id, data)
     } catch (error) {
       const message = error.message || 'Unable to send message.'
+      if (/Thread not found/i.test(message)) {
+        try {
+          const gigContext =
+            selectedGig ||
+            (selectedThread?.gigId
+              ? {
+                  id: selectedThread.gigId,
+                  title: selectedThread.gigTitle,
+                  seller: selectedThread.sellerName,
+                  sellerId: selectedThread.sellerUserId,
+                  sellerUserId: selectedThread.sellerUserId,
+                  owner: selectedThread.sellerUserId,
+                }
+              : null)
+
+          if (gigContext) {
+            const ensuredThread = await ensureThreadForGig(gigContext, { forceCreate: true })
+            setSelectedThreadId(ensuredThread.id)
+            navigate(`/chats/${ensuredThread.id}`)
+            const retryData = await postMessage(ensuredThread.id)
+            appendMessageToThread(ensuredThread.id, retryData)
+            return
+          }
+        } catch (recreateError) {
+          setMessage(recreateError.message || message)
+          return
+        }
+
+        setSelectedThreadId('')
+        setSelectedGigId('')
+      }
       setMessage(message)
     }
   }
@@ -728,44 +922,16 @@ function App() {
       navigate('/chats')
       return
     }
-    const sellerParticipantId = gig.sellerUserId || gig.owner || ''
-    if (!sellerParticipantId) {
-      setMessage('Seller information is missing for this gig.')
-      return
-    }
-    const existingThread = chatThreads.find((thread) => thread.gigId === gig.id)
-    setComposerText('')
-    setComposerFiles([])
-    if (existingThread) {
-      setSelectedThreadId(existingThread.id)
-      navigate(`/chats/${existingThread.id}`)
-      return
-    }
     try {
-      const threadTitle = buildThreadTitleFromGig(gig)
-      const participantIds = [user._id || user.id, sellerParticipantId].filter(Boolean)
-      const created = await authedFetch('/api/chats', {
-        method: 'POST',
-        body: { participantIds, title: threadTitle },
+      const thread = await ensureThreadForGig(gig)
+      setComposerText('')
+      setComposerFiles([])
+      setSelectedThreadId(thread.id)
+      setChatThreads((prev) => {
+        const others = prev.filter((t) => t.id !== thread.id)
+        return [thread, ...others]
       })
-      const threadId = created?.thread?._id || created?.thread?.id
-      let normalized = null
-      if (threadId) {
-        const fetched = await authedFetch(`/api/chats/${threadId}`)
-        normalized = normalizeThread(fetched?.thread || created.thread)
-      } else if (created?.thread) {
-        normalized = normalizeThread(created.thread)
-      }
-      if (normalized) {
-        setChatThreads((prev) => [
-          normalized,
-          ...prev.filter((thread) => thread.id !== normalized.id),
-        ])
-        setSelectedThreadId(normalized.id)
-        navigate(`/chats/${normalized.id}`)
-      } else {
-        setMessage('Unable to open chat.')
-      }
+      navigate(`/chats/${thread.id}`)
     } catch (error) {
       const message = error.message || 'Unable to open chat.'
       setMessage(message)
@@ -1385,18 +1551,25 @@ const openSignupModal = () => {
             onSearchChange={setChatSearch}
             visibleThreads={visibleThreads}
             selectedThreadId={selectedThreadId}
-            onSelectThread={handleSelectThread}
-            selectedThread={selectedThread}
-            composerText={composerText}
-            onComposerChange={setComposerText}
-            composerFiles={composerFiles}
-            onComposerFiles={handleComposerFiles}
-            onRemoveComposerFile={handleRemoveComposerFile}
-            onSendMessage={handleSendMessage}
-            onViewGig={handleViewGigFromChat}
-            user={user}
-          />
-        )}
+          onSelectThread={handleSelectThread}
+          selectedThread={selectedThread}
+          composerText={composerText}
+          onComposerChange={setComposerText}
+          composerFiles={composerFiles}
+          onComposerFiles={handleComposerFiles}
+          onRemoveComposerFile={handleRemoveComposerFile}
+          onSendMessage={handleSendMessage}
+          onViewGig={handleViewGigFromChat}
+          onTyping={() => {
+            if (!selectedThreadId || !user || !authToken) return
+            authedFetch(`/api/chats/${selectedThreadId}/typing`, {
+              method: 'POST',
+              body: { ttlSeconds: 5 },
+            }).catch(() => {})
+          }}
+          user={user}
+        />
+      )}
 
         {view === 'gig-detail' && (
           <GigDetailView

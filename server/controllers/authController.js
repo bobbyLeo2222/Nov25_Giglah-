@@ -136,8 +136,8 @@ export const requestPasswordReset = async (req, res) => {
     await sendMail({
       to: user.email,
       subject: 'Reset your GigLah! password',
-      text: `Reset your password: ${resetLink}`,
-      html: `<p>Reset your password within 60 minutes.</p><p><a href="${resetLink}">Reset password</a></p>`,
+      text: `Use this code to reset your password: ${resetToken}\n\nReset link: ${resetLink}`,
+      html: `<p>Use this code to reset your password within 60 minutes:</p><p><strong>${resetToken}</strong></p><p>Or click the link:</p><p><a href="${resetLink}">Reset password</a></p>`,
     })
   }
   return res.json({ message: 'If that account exists, a reset email has been sent.' })
