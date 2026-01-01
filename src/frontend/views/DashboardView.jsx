@@ -17,6 +17,8 @@ function DashboardView({
   totalPages = 1,
   onGigFilterChange,
   onClearGigFilters,
+  favoriteGigIds = [],
+  onToggleFavoriteGig,
   formatter,
   onOpenSellerProfile,
   onOpenChat,
@@ -297,6 +299,8 @@ function DashboardView({
                 key={gig.id}
                 gig={gig}
                 index={index}
+                isFavorited={favoriteGigIds.includes(gig.id)}
+                onToggleFavorite={() => onToggleFavoriteGig?.(gig)}
                 formatter={formatter}
                 onOpenSellerProfile={onOpenSellerProfile}
                 onOpenChat={onOpenChat}

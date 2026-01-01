@@ -46,7 +46,7 @@ function TopBar({
             className="h-11 px-5 text-base font-semibold text-slate-800 hover:bg-slate-100"
             onClick={onSellerTools}
           >
-            {user?.isSeller ? 'Create Gig' : 'Become a Seller'}
+            {user?.isSeller ? 'Seller tools' : 'Become a Seller'}
           </Button>
         </div>
         {user ? (

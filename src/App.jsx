@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import TopBar from '@/components/ui/TopBar'
 import {
@@ -17,9 +18,10 @@ import DashboardView from '@/frontend/views/DashboardView'
 import ChatView from '@/frontend/views/ChatView'
 import SellerApplicationView from '@/frontend/views/SellerApplicationView'
 import SellerProfileView from '@/frontend/views/SellerProfileView'
-import SellerGigCreateView from '@/frontend/views/SellerGigCreateView'
 import UserProfileView from '@/frontend/views/UserProfileView'
 import GigDetailView from '@/frontend/views/GigDetailView'
+import SellerAnalyticsView from '@/frontend/views/SellerAnalyticsView'
+import SellerDashboardView from '@/frontend/views/SellerDashboardView'
 import {
   buildSellerId,
   defaultAvatar,
@@ -27,13 +29,23 @@ import {
   formatFileSize,
   mapUserFromApi,
   normalizeGig,
+  normalizeMessage,
   normalizeProfile,
   normalizeReview,
   timeAgo,
 } from '@/frontend/helpers'
-import { fetchJSON, getStoredToken, setStoredToken } from '@/lib/api'
+import {
+  fetchJSON,
+  getStoredRefreshToken,
+  getStoredToken,
+  refreshAccessToken,
+  setStoredRefreshToken,
+  setStoredToken,
+} from '@/lib/api'
 
 function App() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [view, setView] = useState('dashboard')
   const [forms, setForms] = useState({
     signup: { fullName: '', email: '', password: '' },
@@ -66,6 +78,10 @@ function App() {
     signup: '',
     login: '',
   })
+  const [verifyForm, setVerifyForm] = useState({ email: '', token: '' })
+  const [resetForm, setResetForm] = useState({ email: '', token: '', password: '' })
+  const [isVerifySubmitting, setIsVerifySubmitting] = useState(false)
+  const [isResetSubmitting, setIsResetSubmitting] = useState(false)
   const [sellerForm, setSellerForm] = useState(initialSellerForm)
   const [sellerError, setSellerError] = useState('')
   const [sellerProfiles, setSellerProfiles] = useState([])
@@ -75,6 +91,7 @@ function App() {
   const [reviewDraft, setReviewDraft] = useState({ rating: 5, text: '', project: '' })
   const [currentServiceSlide, setCurrentServiceSlide] = useState(0)
   const [chatThreads, setChatThreads] = useState([])
+  const [, setUnreadTotal] = useState(0)
   const [selectedThreadId, setSelectedThreadId] = useState('')
   const [composerText, setComposerText] = useState('')
   const [composerFiles, setComposerFiles] = useState([])
@@ -91,15 +108,41 @@ function App() {
     page: 1,
     pageSize: 12,
   })
+  const [favoriteGigIds, setFavoriteGigIds] = useState([])
+  const [favoriteSellerIds, setFavoriteSellerIds] = useState([])
+  const [inquiryDraft, setInquiryDraft] = useState({
+    message: '',
+  })
+  const [buyerBrief, setBuyerBrief] = useState({
+    projectType: '',
+    category: '',
+    budget: '',
+    timeline: '',
+    goals: '',
+    notes: '',
+  })
+  const [buyerBriefs, setBuyerBriefs] = useState([])
+  const [buyerOrders, setBuyerOrders] = useState([])
+  const [sellerOrders, setSellerOrders] = useState([])
+  const [sellerAnalytics, setSellerAnalytics] = useState(null)
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false)
+  const [analyticsError, setAnalyticsError] = useState('')
+  const [analyticsRangeDays, setAnalyticsRangeDays] = useState(30)
+  const [analyticsSlaHours, setAnalyticsSlaHours] = useState(24)
+  const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0)
   const authedFetch = (path, options = {}) => fetchJSON(path, { ...options, token: authToken })
-  const persistAuth = (token, apiUser) => {
+  const persistAuth = (token, apiUser, refreshToken) => {
     setAuthToken(token || '')
     setStoredToken(token || '')
+    if (refreshToken !== undefined) {
+      setStoredRefreshToken(refreshToken || '')
+    }
     setUser(mapUserFromApi(apiUser))
   }
   const clearAuth = () => {
     setAuthToken('')
     setStoredToken('')
+    setStoredRefreshToken('')
     setUser(null)
   }
 
@@ -111,6 +154,11 @@ function App() {
         maximumFractionDigits: 0,
       }),
     [],
+  )
+
+  const userSellerId = useMemo(
+    () => (user ? buildSellerId(user.email || user.name || '') : ''),
+    [user],
   )
 
   const selectedSeller = useMemo(
@@ -127,6 +175,13 @@ function App() {
     () => gigs.filter((gig) => gig.sellerId === selectedSellerId),
     [gigs, selectedSellerId],
   )
+
+  const selectedSellerIsOwner = useMemo(() => {
+    if (!user || !selectedSeller) return false
+    const userId = user._id || user.id
+    if (selectedSeller.userId && selectedSeller.userId === userId) return true
+    return Boolean(user.isSeller && selectedSellerId && selectedSellerId === userSellerId)
+  }, [selectedSeller, selectedSellerId, user, userSellerId])
 
   const sellerReviewList = useMemo(
     () => sellerReviews[selectedSellerId] || [],
@@ -166,11 +221,6 @@ function App() {
     const size = Number(gigFilters.pageSize) || 1
     return Math.max(1, Math.ceil((totalGigs || 0) / size))
   }, [gigFilters.pageSize, totalGigs])
-
-  const userSellerId = useMemo(
-    () => (user ? buildSellerId(user.email || user.name || '') : ''),
-    [user],
-  )
 
   const isGigOwner = useCallback(
     (gig) => {
@@ -226,12 +276,107 @@ function App() {
     [sellerReviews, userSellerId],
   )
 
+  const syncViewFromPath = useCallback(() => {
+    const gigMatch = matchPath('/gig/:gigId', location.pathname)
+    if (gigMatch?.params?.gigId) {
+      setSelectedGigId(gigMatch.params.gigId)
+      setView('gig-detail')
+      return
+    }
+
+    const sellerMatch = matchPath('/seller/:sellerId', location.pathname)
+    if (sellerMatch?.params?.sellerId) {
+      setSelectedSellerId(sellerMatch.params.sellerId)
+      setView('seller-profile')
+      return
+    }
+
+    const chatMatch = matchPath('/chats/:threadId', location.pathname)
+    if (chatMatch?.params?.threadId) {
+      setSelectedThreadId(chatMatch.params.threadId)
+      setView('chat')
+      return
+    }
+
+    if (location.pathname === '/chats') {
+      setSelectedThreadId('')
+      setView('chat')
+      return
+    }
+    if (location.pathname === '/categories') {
+      setView('categories')
+      return
+    }
+    if (location.pathname === '/privacy') {
+      setView('privacy')
+      return
+    }
+    if (location.pathname === '/terms') {
+      setView('terms')
+      return
+    }
+    if (location.pathname === '/me') {
+      setView('user-profile')
+      return
+    }
+    if (location.pathname === '/seller-tools') {
+      navigate('/seller-tools')
+      return
+    }
+    if (location.pathname === '/seller/apply') {
+      setView('seller-apply')
+      return
+    }
+    if (location.pathname === '/verify-email') {
+      setView('verify-email')
+      return
+    }
+    if (location.pathname === '/reset-password') {
+      setView('reset-password')
+      return
+    }
+    setView('dashboard')
+  }, [location.pathname])
+
+  useEffect(() => {
+    syncViewFromPath()
+  }, [syncViewFromPath])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || '')
+    const email = params.get('email') || ''
+    const token = params.get('token') || ''
+    if (location.pathname === '/verify-email') {
+      setVerifyForm((prev) => ({ ...prev, email, token }))
+    }
+    if (location.pathname === '/reset-password') {
+      setResetForm((prev) => ({ ...prev, email, token }))
+    }
+  }, [location.pathname, location.search])
+
+  const profileOrders = useMemo(() => {
+    if (!user) return []
+    return user.isSeller ? sellerOrders : buyerOrders
+  }, [buyerOrders, sellerOrders, user])
+
   const myRatingSummary = useMemo(() => {
     if (!myReviewList.length) return { average: 0, count: 0 }
     const total = myReviewList.reduce((sum, review) => sum + (Number(review.rating) || 0), 0)
     const average = Number((total / myReviewList.length).toFixed(1))
     return { average, count: myReviewList.length }
   }, [myReviewList])
+
+  const savedGigs = useMemo(() => {
+    if (!favoriteGigIds.length) return []
+    const favoriteSet = new Set(favoriteGigIds)
+    return gigs.filter((gig) => favoriteSet.has(gig.id))
+  }, [favoriteGigIds, gigs])
+
+  const savedSellers = useMemo(() => {
+    if (!favoriteSellerIds.length) return []
+    const favoriteSet = new Set(favoriteSellerIds)
+    return sellerProfiles.filter((profile) => favoriteSet.has(profile.id))
+  }, [favoriteSellerIds, sellerProfiles])
 
   const categoryLabels = useMemo(
     () => serviceCategories.flatMap((group) => group.items.map((item) => item.label)),
@@ -299,9 +444,14 @@ function App() {
       })
       .catch((error) => {
         console.error('Failed to restore session', error)
-        if (!cancelled) {
-          clearAuth()
-        }
+        if (cancelled) return
+        refreshAccessToken()
+          .then((newToken) => {
+            setAuthToken(newToken)
+          })
+          .catch(() => {
+            clearAuth()
+          })
       })
       .finally(() => {
         if (!cancelled) setIsAuthLoading(false)
@@ -311,6 +461,27 @@ function App() {
       cancelled = true
     }
   }, [authToken])
+
+  useEffect(() => {
+    if (!authToken || !user) {
+      setFavoriteGigIds([])
+      setFavoriteSellerIds([])
+      return
+    }
+    let cancelled = false
+    authedFetch('/api/favorites')
+      .then((data) => {
+        if (cancelled) return
+        setFavoriteGigIds(data?.gigIds || [])
+        setFavoriteSellerIds(data?.sellerIds || [])
+      })
+      .catch((error) => {
+        console.error('Failed to load favorites', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [authToken, user])
 
   useEffect(() => {
     const loadProfiles = async () => {
@@ -361,6 +532,58 @@ function App() {
   }, [gigFilters])
 
   useEffect(() => {
+    if (!authToken || !user) {
+      setBuyerOrders([])
+      setSellerOrders([])
+      return
+    }
+    let cancelled = false
+    Promise.all([
+      authedFetch('/api/orders?role=buyer'),
+      authedFetch('/api/orders?role=seller'),
+    ])
+      .then(([buyerData, sellerData]) => {
+        if (cancelled) return
+        setBuyerOrders(buyerData?.orders || [])
+        setSellerOrders(sellerData?.orders || [])
+      })
+      .catch((error) => {
+        console.error('Failed to load orders', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [authToken, user])
+
+  useEffect(() => {
+    if (view !== 'seller-analytics' || !authToken || !user) {
+      return
+    }
+    if (!user.isSeller && user.role !== 'admin') {
+      setAnalyticsError('Seller access required.')
+      return
+    }
+    let cancelled = false
+    setIsAnalyticsLoading(true)
+    setAnalyticsError('')
+    authedFetch(`/api/analytics/seller?rangeDays=${analyticsRangeDays}&slaHours=${analyticsSlaHours}`)
+      .then((data) => {
+        if (cancelled) return
+        setSellerAnalytics(data)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setAnalyticsError(error.message || 'Unable to load analytics.')
+      })
+      .finally(() => {
+        if (!cancelled) setIsAnalyticsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [analyticsRangeDays, analyticsSlaHours, analyticsRefreshKey, authToken, user, view])
+
+  useEffect(() => {
     if (!selectedSellerId) return undefined
     let cancelled = false
     fetchJSON(`/api/reviews/${selectedSellerId}`)
@@ -380,6 +603,153 @@ function App() {
       cancelled = true
     }
   }, [selectedSellerId])
+
+  const buildThreadTitleFromGig = (gig) => {
+    if (!gig) return 'Conversation'
+    const safeTitle = gig.title || 'Conversation'
+    return `gig:${gig.id || gig._id || ''}:${safeTitle}`
+  }
+
+  const parseThreadTitle = (title = '') => {
+    if (title.startsWith('gig:')) {
+      const [, gigId = '', ...rest] = title.split(':')
+      const gigTitle = rest.join(':') || 'Conversation'
+      return { gigId, gigTitle }
+    }
+    return { gigId: '', gigTitle: title || 'Conversation' }
+  }
+
+  const normalizeThread = useCallback(
+    (thread) => {
+      if (!thread) return null
+      const { gigId, gigTitle } = parseThreadTitle(thread.title || '')
+      const participants = thread.participants || []
+      const participantMap = new Map(
+        participants.map((participant) => [
+          participant._id?.toString() || participant.id,
+          participant,
+        ]),
+      )
+      const sellerId = thread.seller?._id?.toString?.() || thread.seller?.toString?.() || ''
+      const buyerId = thread.buyer?._id?.toString?.() || thread.buyer?.toString?.() || ''
+      const sellerParticipant =
+        participants.find((participant) => {
+          const pid = participant._id?.toString() || participant.id
+          return pid === sellerId || participant.role === 'seller'
+        }) || null
+      const buyerParticipant =
+        participants.find((participant) => {
+          const pid = participant._id?.toString() || participant.id
+          return pid === buyerId || participant.role === 'buyer'
+        }) || null
+
+      const messages = (thread.messages || []).map((msg, index) => {
+        const senderId = msg.sender?._id?.toString() || msg.sender?.toString() || ''
+        const sender = senderId ? participantMap.get(senderId) : null
+        const senderRole =
+          senderId && senderId === sellerId
+            ? 'seller'
+            : senderId && senderId === buyerId
+              ? 'buyer'
+              : sender?.role === 'seller'
+                ? 'seller'
+                : 'buyer'
+        const senderName =
+          sender?.name ||
+          (senderRole === 'seller'
+            ? thread.sellerName || sellerParticipant?.name || 'Seller'
+            : thread.buyerName || buyerParticipant?.name || 'Buyer')
+        const normalized = normalizeMessage({
+          ...msg,
+          senderName,
+          senderRole,
+        })
+        return {
+          ...normalized,
+          id: normalized.id || `msg-${index}-${Date.now()}`,
+          senderRole,
+          senderId: normalized.senderId || senderId || undefined,
+          senderName,
+          attachments: normalized.attachments.map((file) => ({
+            ...file,
+            previewUrl: file.previewUrl || file.url || '',
+          })),
+        }
+      })
+
+      return {
+        id: thread._id || thread.id,
+        gigId: thread.gigId || gigId,
+        gigTitle: thread.gigTitle || gigTitle || thread.title || 'Conversation',
+        sellerUserId: sellerId,
+        buyerUserId: buyerId,
+        sellerName: thread.sellerName || sellerParticipant?.name || 'Seller',
+        buyerName: thread.buyerName || buyerParticipant?.name || 'Buyer',
+        buyerEmail: buyerParticipant?.email || '',
+        lastUpdatedAt: thread.lastMessageAt
+          ? new Date(thread.lastMessageAt).getTime()
+          : messages[messages.length - 1]?.sentAt || Date.now(),
+        messages,
+        unreadCount:
+          thread.unreadCount ??
+          messages.filter(
+            (msg) => !(msg.readBy || []).some((id) => id === (user?._id || user?.id)),
+          ).length,
+        typingStatuses: (thread.typingStatuses || []).map((entry) => entry.user?.toString?.() || entry.user),
+      }
+    },
+    [user],
+  )
+
+  useEffect(() => {
+    if (!user || !authToken) {
+      setChatThreads([])
+      setUnreadTotal(0)
+      return
+    }
+    let cancelled = false
+    authedFetch('/api/chats')
+      .then((data) => {
+        if (cancelled) return
+        const normalized = (data?.threads || []).map(normalizeThread).filter(Boolean)
+        setChatThreads(normalized)
+        const total = normalized.reduce((sum, thread) => sum + (thread.unreadCount || 0), 0)
+        setUnreadTotal(total)
+      })
+      .catch((error) => {
+        console.error('Failed to load chats', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [authToken, normalizeThread, user])
+
+  useEffect(() => {
+    if (!user || !authToken || !selectedThreadId) return undefined
+    let cancelled = false
+    authedFetch(`/api/chats/${selectedThreadId}`)
+      .then((data) => {
+        if (cancelled || !data?.thread) return
+        const normalized = normalizeThread(data.thread)
+        if (!normalized) return
+        setChatThreads((prev) => {
+          const others = prev.filter((thread) => thread.id !== normalized.id)
+          return [normalized, ...others]
+        })
+        setUnreadTotal((prev) => {
+          const others = chatThreads
+            .filter((thread) => thread.id !== normalized.id)
+            .reduce((sum, thread) => sum + (thread.unreadCount || 0), 0)
+          return others + (normalized.unreadCount || 0)
+        })
+      })
+      .catch((error) => {
+        console.error('Failed to load thread', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [authToken, chatThreads, normalizeThread, selectedThreadId, user])
 
   const ensureSellerProfile = (sellerId, sellerName, extras = {}) => {
     if (!sellerId) return
@@ -407,7 +777,15 @@ function App() {
     if (!sellerId) return
     ensureSellerProfile(sellerId, sellerName)
     setSelectedSellerId(sellerId)
-    setView('seller-profile')
+    navigate(`/seller/${sellerId}`)
+  }
+
+  const trackGigView = (gig) => {
+    if (!gig?.id) return
+    fetchJSON('/api/analytics/views', {
+      method: 'POST',
+      body: { gigId: gig.id },
+    }).catch(() => {})
   }
 
   const handleOpenGigDetail = (gig) => {
@@ -417,7 +795,8 @@ function App() {
       ensureSellerProfile(gig.sellerId, gig.seller)
       setSelectedSellerId(gig.sellerId)
     }
-    setView('gig-detail')
+    navigate(`/gig/${gig.id}`)
+    trackGigView(gig)
   }
 
   const handleOpenMyProfile = () => {
@@ -425,7 +804,7 @@ function App() {
     const sellerId = userSellerId || buildSellerId(user.email || user.name || '')
     ensureSellerProfile(sellerId, user.name || 'Member')
     setSelectedSellerId(sellerId)
-    setView('user-profile')
+    navigate('/me')
   }
 
   const handleViewPublicSellerProfile = () => {
@@ -433,13 +812,51 @@ function App() {
     const sellerId = userSellerId || buildSellerId(user.email || user.name || '')
     ensureSellerProfile(sellerId, user.name || 'Member')
     setSelectedSellerId(sellerId)
-    setView('seller-profile')
+    navigate(`/seller/${sellerId}`)
   }
 
   const handleCategorySelect = (label) => {
     setActiveCategory(label)
     setGigFilters((prev) => ({ ...prev, category: label, page: 1 }))
-    setView('categories')
+    navigate('/categories')
+  }
+
+  const goToDashboard = useCallback(() => navigate('/'), [navigate])
+  const goToSellerTools = useCallback(() => navigate('/seller-tools'), [navigate])
+  const goToChats = useCallback(() => navigate('/chats'), [navigate])
+
+
+  const handleOpenChatFromOrder = (order) => {
+    if (!order) return
+    const matchingGig = gigs.find((gig) => gig.id === order.gigId)
+    const fallbackGig = {
+      id: order.gigId,
+      title: order.gigTitle,
+      sellerId: order.sellerId || '',
+      seller: user?.name || 'Seller',
+    }
+    handleOpenChatFromGig(matchingGig || fallbackGig)
+  }
+
+  const handleOpenProfile = () => {
+    if (!user) return
+    if (user.isSeller) {
+      setView('seller-analytics')
+      return
+    }
+    handleOpenMyProfile()
+  }
+
+  const handleOpenSellerTools = () => {
+    if (!user) {
+      setMessage('Log in first.')
+      return
+    }
+    if (user.isSeller) {
+      navigate('/seller-tools')
+      return
+    }
+    startSellerApplication()
   }
 
   const getCategoryIcon = (label) => {
@@ -454,6 +871,19 @@ function App() {
     setSelectedThreadId(threadId)
     setComposerText('')
     setComposerFiles([])
+    navigate(threadId ? `/chats/${threadId}` : '/chats')
+    if (threadId && user && authToken) {
+      authedFetch(`/api/chats/${threadId}/read`, { method: 'POST' }).catch(() => {})
+      setChatThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === threadId ? { ...thread, unreadCount: 0 } : thread,
+        ),
+      )
+      setUnreadTotal((prev) => {
+        const target = chatThreads.find((t) => t.id === threadId)
+        return prev - (target?.unreadCount || 0)
+      })
+    }
   }
 
   const handleGigFilterChange = (field, value) => {
@@ -472,32 +902,247 @@ function App() {
     }))
   }
 
-  const handleComposerFiles = (event) => {
+  const readFileAsDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result || '')
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsDataURL(file)
+    })
+
+  const handleComposerFiles = async (event) => {
     const files = Array.from(event.target.files || [])
     if (files.length === 0) return
-    const mapped = files.map((file) => ({
-      id: `${Date.now()}-${file.name}-${Math.random().toString(16).slice(2)}`,
-      name: file.name,
-      type: file.type || 'application/octet-stream',
-      sizeLabel: formatFileSize(file.size || 0),
-      previewUrl: file.type?.startsWith('image/') ? URL.createObjectURL(file) : '',
-    }))
-    setComposerFiles((prev) => [...prev, ...mapped])
-    event.target.value = ''
+    try {
+      const mapped = await Promise.all(
+        files.map(async (file) => {
+          const dataUrl = await readFileAsDataUrl(file)
+          return {
+            id: `${Date.now()}-${file.name}-${Math.random().toString(16).slice(2)}`,
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            size: file.size || 0,
+            sizeLabel: formatFileSize(file.size || 0),
+            previewUrl: dataUrl,
+          }
+        }),
+      )
+      setComposerFiles((prev) => [...prev, ...mapped])
+    } catch (error) {
+      console.error('Failed to read attachment', error)
+      setMessage('Unable to preview attachment.')
+    } finally {
+      event.target.value = ''
+    }
   }
 
   const handleRemoveComposerFile = (fileId) => {
     setComposerFiles((prev) => prev.filter((file) => file.id !== fileId))
   }
 
-  const handleSendMessage = (event) => {
+  const handleUpdateOrderStatus = async (orderId, status, cancelReason = '') => {
+    if (!orderId || !status) return
+    if (!user || !authToken) {
+      setMessage('Log in to manage orders.')
+      return
+    }
+    try {
+      const data = await authedFetch(`/api/orders/${orderId}`, {
+        method: 'PUT',
+        body: { status, cancelReason },
+      })
+      if (data?.order) {
+        setBuyerOrders((prev) =>
+          prev.map((order) =>
+            order._id === orderId || order.id === orderId ? data.order : order,
+          ),
+        )
+        setSellerOrders((prev) =>
+          prev.map((order) =>
+            order._id === orderId || order.id === orderId ? data.order : order,
+          ),
+        )
+        setMessage(
+          status === 'cancelled'
+            ? 'Order cancelled.'
+            : status === 'complete'
+              ? 'Completion recorded.'
+              : 'Order updated.',
+        )
+      }
+    } catch (error) {
+      setMessage(error.message || 'Unable to update order.')
+    }
+  }
+
+  const handleRequestOrderCancel = (orderId) => {
+    const reason = window.prompt('Reason for cancellation:')
+    if (!reason || !reason.trim()) {
+      setMessage('Cancellation reason is required.')
+      return
+    }
+    handleUpdateOrderStatus(orderId, 'cancelled', reason.trim())
+  }
+
+  const handleRequestOrderComplete = (orderId) => {
+    handleUpdateOrderStatus(orderId, 'complete')
+  }
+
+  const handleToggleFavoriteGig = async (gig) => {
+    if (!user || !authToken) {
+      setMessage('Log in to save gigs.')
+      return
+    }
+    const isFav = favoriteGigIds.includes(gig.id)
+    try {
+      const endpoint = isFav ? `/api/favorites/gig/${gig.id}` : '/api/favorites'
+      const options = isFav
+        ? { method: 'DELETE' }
+        : { method: 'POST', body: { type: 'gig', targetId: gig.id } }
+      const data = await authedFetch(endpoint, options)
+      setFavoriteGigIds(data?.gigIds || [])
+      setFavoriteSellerIds(data?.sellerIds || [])
+      setMessage(isFav ? 'Removed from saved gigs.' : 'Saved to your gigs.')
+    } catch (error) {
+      setMessage(error.message || 'Unable to update favorites.')
+    }
+  }
+
+  const handleToggleFavoriteSeller = async (sellerId) => {
+    if (!sellerId) return
+    if (!user || !authToken) {
+      setMessage('Log in to save sellers.')
+      return
+    }
+    const isFav = favoriteSellerIds.includes(sellerId)
+    try {
+      const endpoint = isFav ? `/api/favorites/seller/${sellerId}` : '/api/favorites'
+      const options = isFav
+        ? { method: 'DELETE' }
+        : { method: 'POST', body: { type: 'seller', targetId: sellerId } }
+      const data = await authedFetch(endpoint, options)
+      setFavoriteGigIds(data?.gigIds || [])
+      setFavoriteSellerIds(data?.sellerIds || [])
+      setMessage(isFav ? 'Removed seller from saved list.' : 'Seller saved.')
+    } catch (error) {
+      setMessage(error.message || 'Unable to update favorites.')
+    }
+  }
+
+  const handleInquiryChange = (field) => (event) => {
+    setInquiryDraft((prev) => ({ ...prev, [field]: event.target.value }))
+  }
+
+  const handleSubmitInquiry = async (gig) => {
+    if (!gig) return
+    const { message: inquiryMessage } = inquiryDraft
+    if (!inquiryMessage) {
+      setMessage('Share a short brief or question before sending.')
+      return
+    }
+    try {
+      await fetchJSON('/api/inquiries', {
+        method: 'POST',
+        body: {
+          gigId: gig.id,
+          sellerId: gig.sellerId || '',
+          message: inquiryMessage,
+        },
+      })
+      setInquiryDraft({ message: '' })
+      setMessage('Inquiry sent to the seller.')
+    } catch (error) {
+      setMessage(error.message || 'Unable to send inquiry right now.')
+    }
+  }
+
+  const handleCreateOrder = async (gig) => {
+    if (!gig) return
+    if (!user || !authToken) {
+      setMessage('Log in to place an order.')
+      return
+    }
+    if (user.isSeller) {
+      setMessage('Switch to buyer mode to place an order.')
+      return
+    }
+    try {
+      const data = await authedFetch('/api/orders', {
+        method: 'POST',
+        body: {
+          gigId: gig.id,
+          gigTitle: gig.title,
+          sellerId: gig.sellerId || gig.owner || '',
+          price: gig.price || 0,
+          notes: inquiryDraft.message || '',
+        },
+      })
+      if (data?.order) {
+        setBuyerOrders((prev) => [data.order, ...prev])
+        setMessage('Order created. The seller will be notified.')
+      }
+    } catch (error) {
+      setMessage(error.message || 'Unable to create order right now.')
+    }
+  }
+
+  const ensureThreadForGig = async (gig, { forceCreate = false } = {}) => {
+    if (!gig) throw new Error('Seller information is missing for this gig.')
+    if (!user || !authToken) throw new Error('Log in to message the seller.')
+
+    const sellerParticipantId = gig.sellerUserId || gig.owner || gig.sellerId || ''
+    if (!sellerParticipantId) throw new Error('Seller account is missing for this gig.')
+
+    const buyerId = user._id || user.id
+    const existingThread = !forceCreate
+      ? chatThreads.find((thread) => thread.gigId === gig.id)
+      : null
+    if (existingThread) return existingThread
+
+    const threadTitle = buildThreadTitleFromGig(gig)
+    const participantIds = [buyerId, sellerParticipantId].filter(Boolean)
+    const created = await authedFetch('/api/chats', {
+      method: 'POST',
+      body: {
+        participantIds,
+        title: threadTitle,
+        gigId: gig.id,
+        gigTitle: gig.title,
+        sellerId: sellerParticipantId,
+        buyerId,
+        sellerName: gig.seller || 'Seller',
+        buyerName: user.name || 'Buyer',
+      },
+    })
+
+    const threadId = created?.thread?._id || created?.thread?.id
+    let normalized = null
+    if (threadId) {
+      const fetched = await authedFetch(`/api/chats/${threadId}`)
+      normalized = normalizeThread(fetched?.thread || created.thread)
+    } else if (created?.thread) {
+      normalized = normalizeThread(created.thread)
+    }
+
+    if (!normalized) throw new Error('Unable to open chat.')
+
+    setChatThreads((prev) => [
+      normalized,
+      ...prev.filter((thread) => thread.id !== normalized.id),
+    ])
+
+    return normalized
+  }
+
+  const handleSendMessage = async (event) => {
     event.preventDefault()
     if (!selectedThread) {
       setMessage('Pick a conversation first.')
       return
     }
-    if (!user) {
+    if (!user || !authToken) {
       setMessage('Log in to send messages.')
+      openLoginModal()
       return
     }
     const text = composerText.trim()
@@ -505,64 +1150,179 @@ function App() {
       setMessage('Type a message or attach a file first.')
       return
     }
-    const now = Date.now()
-    const newMessage = {
-      id: `msg-${now}`,
-      senderRole: user?.isSeller ? 'seller' : 'buyer',
-      senderName: user?.name || 'Member',
+
+    const payload = {
       text,
-      sentAt: now,
-      attachments: composerFiles.map((file) => ({
-        id: file.id,
+      files: composerFiles.map((file) => ({
         name: file.name,
         type: file.type,
-        sizeLabel: file.sizeLabel,
-        previewUrl: file.previewUrl,
+        size: file.size || 0,
+        url: file.previewUrl || '',
       })),
+      gigId: selectedThread.gigId || selectedGig?.id || '',
+      gigTitle: selectedThread.gigTitle || selectedGig?.title || '',
+      sellerId:
+        selectedThread.sellerUserId ||
+        selectedGig?.sellerUserId ||
+        selectedGig?.owner ||
+        selectedGig?.sellerId ||
+        '',
+      buyerId: user._id || user.id,
+      sellerName: selectedThread.sellerName || selectedGig?.seller || 'Seller',
+      buyerName: user.name || 'Buyer',
+      participantIds: [
+        selectedThread.sellerUserId ||
+          selectedGig?.sellerUserId ||
+          selectedGig?.owner ||
+          selectedGig?.sellerId ||
+          '',
+      ].filter(Boolean),
     }
-    setChatThreads((prev) =>
-      prev.map((thread) =>
-        thread.id === selectedThread.id
-          ? { ...thread, lastUpdatedAt: now, messages: [...thread.messages, newMessage] }
-          : thread,
-      ),
-    )
-    setComposerText('')
-    setComposerFiles([])
-    setMessage('Message sent.')
+
+    const postMessage = (threadId) =>
+      authedFetch(`/api/chats/${threadId}/messages`, {
+        method: 'POST',
+        body: payload,
+      })
+
+    const appendMessageToThread = (threadId, data) => {
+      const now = Date.now()
+      const newMessage = data?.message
+        ? {
+            id: data.message._id || data.message.id || `msg-${now}`,
+            senderRole: user?.isSeller ? 'seller' : 'buyer',
+            senderId:
+              data.message.sender?._id?.toString?.() ||
+              data.message.sender?.toString?.() ||
+              user?._id ||
+              user?.id,
+            senderName: user?.name || 'Member',
+            text: data.message.text || text,
+            sentAt: data.message.createdAt ? new Date(data.message.createdAt).getTime() : now,
+            attachments: (data.message.files || []).map((file, index) => ({
+              id: `${data.message._id || data.message.id || 'file'}-${index}`,
+              name: file.name || 'Attachment',
+              type: file.type || 'file',
+              sizeLabel: formatFileSize(file.size || 0),
+              previewUrl: file.url || '',
+              url: file.url || '',
+            })),
+          }
+        : {
+            id: `msg-${now}`,
+            senderRole: user?.isSeller ? 'seller' : 'buyer',
+            senderId: user?._id || user?.id,
+            senderName: user?.name || 'Member',
+            text,
+            sentAt: now,
+            attachments: composerFiles.map((file) => ({
+              id: file.id,
+              name: file.name,
+              type: file.type,
+              sizeLabel: file.sizeLabel,
+              previewUrl: file.previewUrl,
+              url: file.previewUrl,
+            })),
+          }
+
+      setChatThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === threadId
+            ? { ...thread, lastUpdatedAt: newMessage.sentAt, messages: [...thread.messages, newMessage] }
+            : thread,
+        ),
+      )
+      setUnreadTotal((prev) => prev)
+      setComposerText('')
+      setComposerFiles([])
+      setMessage('Message sent.')
+    }
+
+    try {
+      const data = await postMessage(selectedThread.id)
+      appendMessageToThread(selectedThread.id, data)
+    } catch (error) {
+      const message = error.message || 'Unable to send message.'
+      if (/Thread not found/i.test(message)) {
+        try {
+          const gigContext =
+            selectedGig ||
+            (selectedThread?.gigId
+              ? {
+                  id: selectedThread.gigId,
+                  title: selectedThread.gigTitle,
+                  seller: selectedThread.sellerName,
+                  sellerId: selectedThread.sellerUserId,
+                  sellerUserId: selectedThread.sellerUserId,
+                  owner: selectedThread.sellerUserId,
+                }
+              : null)
+
+          if (gigContext) {
+            const ensuredThread = await ensureThreadForGig(gigContext, { forceCreate: true })
+            setSelectedThreadId(ensuredThread.id)
+            navigate(`/chats/${ensuredThread.id}`)
+            const retryData = await postMessage(ensuredThread.id)
+            appendMessageToThread(ensuredThread.id, retryData)
+            return
+          }
+        } catch (recreateError) {
+          setMessage(recreateError.message || message)
+          return
+        }
+
+        setSelectedThreadId('')
+        setSelectedGigId('')
+      }
+      setMessage(message)
+    }
   }
 
-  const handleOpenChatFromGig = (gig) => {
+  const handleViewGigFromChat = () => {
+    if (!selectedThread?.gigId) return
+    const gig =
+      gigs.find((entry) => entry.id === selectedThread.gigId) || {
+        id: selectedThread.gigId,
+        title: selectedThread.gigTitle,
+        sellerId: selectedThread.sellerUserId,
+        seller: selectedThread.sellerName,
+      }
+    handleOpenGigDetail(gig)
+  }
+
+  const handleOpenChatFromGig = async (gig) => {
     if (!gig) return
+    const userId = user?._id || user?.id
+    const isOwner =
+      user?.isSeller &&
+      ((gig.owner && userId && gig.owner === userId) ||
+        (gig.sellerId && userSellerId && gig.sellerId === userSellerId))
+    if (isOwner) {
+      setMessage('You cannot message yourself from your own gig.')
+      return
+    }
     if (gig.sellerId) {
       ensureSellerProfile(gig.sellerId, gig.seller)
       setSelectedSellerId(gig.sellerId)
     }
-    const existingThread = chatThreads.find((thread) => thread.gigId === gig.id)
-    setComposerText('')
-    setComposerFiles([])
-    if (existingThread) {
-      setSelectedThreadId(existingThread.id)
-      setView('chat')
+    if (!user || !authToken) {
+      setMessage('Log in to message the seller.')
+      openLoginModal()
       return
     }
-    const now = Date.now()
-    const buyerAlias = user?.name || 'Buyer'
-    const newThread = {
-      id: `thread-${gig.id}`,
-      gigId: gig.id,
-      gigTitle: gig.title,
-      sellerName: gig.seller || 'Seller',
-      buyerName: buyerAlias,
-      buyerEmail: user?.email || '',
-      lastUpdatedAt: now,
-      messages: [],
-    }
-    setChatThreads((prev) => [newThread, ...prev])
-    setSelectedThreadId(newThread.id)
-    setView('chat')
-    if (!user) {
-      setMessage('Log in to message the seller.')
+    try {
+      const thread = await ensureThreadForGig(gig)
+      setComposerText('')
+      setComposerFiles([])
+      setSelectedThreadId(thread.id)
+      setChatThreads((prev) => {
+        const others = prev.filter((t) => t.id !== thread.id)
+        return [thread, ...others]
+      })
+      navigate(`/chats/${thread.id}`)
+    } catch (error) {
+      const message = error.message || 'Unable to open chat.'
+      setMessage(message)
     }
   }
 
@@ -577,11 +1337,13 @@ function App() {
   const handleSignup = async (event) => {
     event.preventDefault()
     const { fullName, email, password } = forms.signup
-    if (!fullName || !email || !password) {
+    const nameValue = fullName.trim()
+    const emailValue = email.trim().toLowerCase()
+    if (!nameValue || !emailValue || !password) {
       setFormErrors((prev) => ({ ...prev, signup: 'Please complete every field.' }))
       return
     }
-    if (!/.+@.+\..+/.test(email)) {
+    if (!/.+@.+\..+/.test(emailValue)) {
       setFormErrors((prev) => ({ ...prev, signup: 'Use a valid email address.' }))
       return
     }
@@ -595,20 +1357,27 @@ function App() {
       const data = await fetchJSON('/api/auth/register', {
         method: 'POST',
         body: {
-          name: fullName.trim(),
-          email: email.trim().toLowerCase(),
+          name: nameValue,
+          email: emailValue,
           password,
         },
       })
       if (data?.token && data?.user) {
-        persistAuth(data.token, data.user)
+        persistAuth(data.token, data.user, data.refreshToken)
+      } else if (data?.user && data?.emailVerified === false) {
+        setVerifyForm({ email: emailValue, token: '' })
+        setMessage(data?.message || 'Verify your email before logging in.')
+        navigate('/verify-email')
       }
       setForms((prev) => ({
         ...prev,
         signup: { fullName: '', email: '', password: '' },
       }))
-      setMessage('Account created. Switch to seller any time.')
-      setView('dashboard')
+      setMessage(
+        data?.message || 'Account created. Please verify your email before logging in.',
+      )
+      setVerifyForm({ email: emailValue, token: '' })
+      navigate('/verify-email')
       setShowSignupPassword(false)
     } catch (error) {
       const message = error.message || 'Unable to create account.'
@@ -646,7 +1415,12 @@ function App() {
         body: { email: email.trim().toLowerCase(), password },
       })
       if (data?.token && data?.user) {
-        persistAuth(data.token, data.user)
+        persistAuth(data.token, data.user, data.refreshToken)
+      } else if (data?.message && /verify/i.test(data.message)) {
+        setVerifyForm({ email: email.trim().toLowerCase(), token: '' })
+        setMessage(data.message)
+        navigate('/verify-email')
+        return
       } else {
         setUser({
           name: friendlyName,
@@ -659,7 +1433,7 @@ function App() {
         login: { email: '', password: '' },
       }))
       setMessage('Welcome back.')
-      setView('dashboard')
+      navigate('/')
       setShowLoginPassword(false)
     } catch (error) {
       const message = error.message || 'Unable to sign in.'
@@ -671,13 +1445,20 @@ function App() {
   }
 
   const handleLogout = () => {
+    const refresh = getStoredRefreshToken()
+    if (refresh) {
+      fetchJSON('/api/auth/logout', { method: 'POST', body: { refreshToken: refresh } }).catch(
+        () => {},
+      )
+    }
     clearAuth()
     setMessage('Signed out.')
-    setView('dashboard')
+    navigate('/')
   }
 
   const dismissModals = () => {
     setView('dashboard')
+    navigate('/')
     setShowLoginPassword(false)
     setShowSignupPassword(false)
     setFormErrors({ signup: '', login: '' })
@@ -826,7 +1607,7 @@ function App() {
         ensureSellerProfile(normalized.sellerId, normalized.seller)
         setSelectedGigId(normalized.id)
         if (normalized.sellerId) setSelectedSellerId(normalized.sellerId)
-        setView('gig-detail')
+        navigate(`/gig/${normalized.id}`)
       }
       setNewGig({
         title: '',
@@ -852,9 +1633,100 @@ function App() {
   const sellerInputClasses =
     'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100'
 
-const handleForgotPassword = () => {
-  setMessage('Password reset instructions will be emailed to you shortly.')
-  dismissModals()
+const handleForgotPassword = async () => {
+  try {
+    const email = forms.login.email || forms.signup.email
+    if (!email) {
+      setMessage('Enter your email to reset your password.')
+      return
+    }
+    await fetchJSON('/api/auth/forgot-password', {
+      method: 'POST',
+      body: { email: email.trim().toLowerCase() },
+    })
+    setMessage('If an account exists, a reset email has been sent.')
+  } catch (error) {
+    setMessage(error.message || 'Unable to start password reset.')
+  } finally {
+    dismissModals()
+  }
+}
+
+const handleVerifySubmit = async (event) => {
+  event.preventDefault()
+  const email = verifyForm.email.trim().toLowerCase()
+  const token = verifyForm.token.trim()
+  if (!email || !token) {
+    setMessage('Add your email and verification code.')
+    return
+  }
+  try {
+    setIsVerifySubmitting(true)
+    const data = await fetchJSON('/api/auth/verify-email', {
+      method: 'POST',
+      body: { email, token },
+    })
+    if (data?.user && data?.token) {
+      persistAuth(data.token, data.user, data.refreshToken)
+      setMessage('Email verified. Welcome!')
+    } else {
+      setMessage('Email verified.')
+    }
+    navigate('/')
+  } catch (error) {
+    setMessage(error.message || 'Unable to verify email.')
+  } finally {
+    setIsVerifySubmitting(false)
+  }
+}
+
+const handleResendVerification = async () => {
+  const email = verifyForm.email.trim().toLowerCase() || forms.signup.email || forms.login.email
+  if (!email) {
+    setMessage('Enter your email to resend verification.')
+    return
+  }
+  try {
+    setIsVerifySubmitting(true)
+    await fetchJSON('/api/auth/resend-verification', {
+      method: 'POST',
+      body: { email },
+    })
+    setMessage('If an account exists, a verification email has been sent.')
+  } catch (error) {
+    setMessage(error.message || 'Unable to resend verification.')
+  } finally {
+    setIsVerifySubmitting(false)
+  }
+}
+
+const handleResetSubmit = async (event) => {
+  event.preventDefault()
+  const email = resetForm.email.trim().toLowerCase()
+  const token = resetForm.token.trim()
+  const password = resetForm.password
+  if (!email || !token || !password) {
+    setMessage('Add email, code, and new password.')
+    return
+  }
+  if (password.length < 8) {
+    setMessage('Password must be at least 8 characters.')
+    return
+  }
+  try {
+    setIsResetSubmitting(true)
+    await fetchJSON('/api/auth/reset-password', {
+      method: 'POST',
+      body: { email, token, password },
+    })
+    setMessage('Password updated. Please sign in.')
+    navigate('/')
+    openLoginModal()
+  } catch (error) {
+    setMessage(error.message || 'Unable to reset password.')
+  } finally {
+    setIsResetSubmitting(false)
+  }
 }
 
 const openLoginModal = () => {
@@ -876,13 +1748,13 @@ const openSignupModal = () => {
     }
     setSellerError('')
     setSellerForm(initialSellerForm)
-    setView('seller-apply')
+    navigate('/seller/apply')
   }
 
   const cancelSellerApplication = () => {
     setSellerError('')
     setSellerForm(initialSellerForm)
-    setView('seller')
+    navigate('/seller-tools')
   }
 
   const handleSellerFormChange = (field) => (event) => {
@@ -991,7 +1863,7 @@ const openSignupModal = () => {
       })
       if (data?.profile) {
         const normalized = normalizeProfile(data.profile)
-        setSellerProfiles((prev) => {
+      setSellerProfiles((prev) => {
           const others = prev.filter((profile) => profile.id !== normalized.id)
           return [normalized, ...others]
         })
@@ -999,7 +1871,7 @@ const openSignupModal = () => {
       }
       setUser((prev) => (prev ? { ...prev, isSeller: true, role: 'seller' } : prev))
       setSellerForm(initialSellerForm)
-      setView('seller')
+      setView('seller-dashboard')
       setMessage('Seller profile saved. Draft your first gig to go live.')
     } catch (error) {
       const message = error.message || 'Unable to save seller profile.'
@@ -1015,6 +1887,44 @@ const openSignupModal = () => {
     setReviewDraft((prev) => ({ ...prev, [field]: value }))
   }
 
+  const handleBuyerBriefChange = (field) => (event) => {
+    const value = event.target.value
+    setBuyerBrief((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleSubmitBuyerBrief = (event) => {
+    event.preventDefault()
+    if (!user || !authToken) {
+      setMessage('Log in to save your project brief.')
+      return
+    }
+    if (user.isSeller) {
+      setMessage('Switch to buyer mode to save a brief.')
+      return
+    }
+    const { projectType, category, goals } = buyerBrief
+    if (!projectType.trim() || !category.trim() || !goals.trim()) {
+      setMessage('Add a project type, category, and brief goals.')
+      return
+    }
+    const newBrief = {
+      id: `brief-${Date.now()}`,
+      ...buyerBrief,
+      createdAt: Date.now(),
+    }
+    setBuyerBriefs((prev) => [newBrief, ...prev])
+    setBuyerBrief({
+      projectType: '',
+      category: '',
+      budget: '',
+      timeline: '',
+      goals: '',
+      notes: '',
+    })
+    setMessage('Brief saved. You can reuse it for inquiries or broadcasts.')
+  }
+
+
   const handleSubmitReview = async (event) => {
     event.preventDefault()
     if (!selectedSellerId) {
@@ -1027,6 +1937,15 @@ const openSignupModal = () => {
     }
     if (user.isSeller) {
       setMessage('Switch to buyer mode to review sellers.')
+      return
+    }
+    const hasQualifyingOrder = buyerOrders.some(
+      (order) =>
+        (order.sellerId && order.sellerId === selectedSellerId) &&
+        ['delivered', 'complete'].includes(order.status),
+    )
+    if (!hasQualifyingOrder) {
+      setMessage('Complete an order with this seller before leaving a review.')
       return
     }
     const ratingNumber = Number(reviewDraft.rating)
@@ -1077,12 +1996,12 @@ const openSignupModal = () => {
     <div className="min-h-screen bg-white text-slate-900 antialiased overflow-x-hidden">
       <TopBar
         user={user}
-        onDashboard={() => setView('dashboard')}
+        onDashboard={goToDashboard}
         onLogin={openLoginModal}
         onSignup={openSignupModal}
-        onChat={() => setView('chat')}
-        onSellerTools={() => setView('seller')}
-        onProfile={handleOpenMyProfile}
+        onChat={goToChats}
+        onSellerTools={handleOpenSellerTools}
+        onProfile={handleOpenProfile}
         onLogout={handleLogout}
       />
 
@@ -1114,7 +2033,7 @@ const openSignupModal = () => {
             onNextSlide={() => setCurrentServiceSlide((prev) => (prev + 1) % serviceSlides.length)}
             onSelectSlide={(index) => setCurrentServiceSlide(index)}
             onSelectCategory={handleCategorySelect}
-            onShowAllCategories={() => setView('categories')}
+            onShowAllCategories={() => navigate('/categories')}
             gigs={gigs}
             totalGigs={totalGigs}
             gigFilters={gigFilters}
@@ -1123,6 +2042,8 @@ const openSignupModal = () => {
             onOpenSellerProfile={handleOpenSellerProfile}
             onOpenChat={handleOpenChatFromGig}
             onOpenGig={handleOpenGigDetail}
+            favoriteGigIds={favoriteGigIds}
+            onToggleFavoriteGig={handleToggleFavoriteGig}
             onGigFilterChange={handleGigFilterChange}
             onClearGigFilters={handleClearGigFilters}
           />
@@ -1143,7 +2064,14 @@ const openSignupModal = () => {
             onComposerFiles={handleComposerFiles}
             onRemoveComposerFile={handleRemoveComposerFile}
             onSendMessage={handleSendMessage}
-            onViewGig={() => setView('dashboard')}
+            onViewGig={handleViewGigFromChat}
+            onTyping={() => {
+              if (!selectedThread?.id || !authToken) return
+              authedFetch(`/api/chats/${selectedThread.id}/typing`, {
+                method: 'POST',
+                body: { ttlSeconds: 5 },
+              }).catch(() => {})
+            }}
             user={user}
           />
         )}
@@ -1155,11 +2083,19 @@ const openSignupModal = () => {
             sellerRatingSummary={sellerRatingSummary}
             sellerReviewList={sellerReviewList}
             formatter={formatter}
-            onBackToDashboard={() => setView('dashboard')}
+            onBackToDashboard={goToDashboard}
             onOpenSellerProfile={handleOpenSellerProfile}
             onOpenChat={handleOpenChatFromGig}
             onOpenRelatedGig={handleOpenGigDetail}
             relatedGigs={relatedGigs}
+            isFavorited={selectedGig ? favoriteGigIds.includes(selectedGig.id) : false}
+            onToggleFavorite={() => selectedGig && handleToggleFavoriteGig(selectedGig)}
+            inquiryDraft={inquiryDraft}
+            onInquiryChange={handleInquiryChange}
+            onSubmitInquiry={() => handleSubmitInquiry(selectedGig)}
+            onCreateOrder={() => handleCreateOrder(selectedGig)}
+            user={user}
+            userSellerId={userSellerId}
           />
         )}
 
@@ -1173,11 +2109,23 @@ const openSignupModal = () => {
             formatter={formatter}
             timeAgo={timeAgo}
             user={user}
-            onBackToDashboard={() => setView('dashboard')}
+            canViewAnalytics={selectedSellerIsOwner}
+            isOwner={selectedSellerIsOwner}
+            savedGigs={savedGigs}
+            savedSellers={savedSellers}
+            buyerBriefs={buyerBriefs}
+            onOpenAnalytics={() => setView('seller-analytics')}
+            onBackToDashboard={goToDashboard}
             onSubmitReview={handleSubmitReview}
             onReviewDraftChange={handleReviewDraftChange}
             onOpenChatFromGig={handleOpenChatFromGig}
             onOpenGigFromProfile={handleOpenGigDetail}
+            isSellerFavorited={
+              selectedSeller ? favoriteSellerIds.includes(selectedSeller.id) : false
+            }
+            onToggleFavoriteSeller={() =>
+              selectedSeller && handleToggleFavoriteSeller(selectedSeller.id)
+            }
           />
         )}
 
@@ -1188,40 +2136,61 @@ const openSignupModal = () => {
             myGigs={myGigs}
             reviewList={myReviewList}
             ratingSummary={myRatingSummary}
+            orders={profileOrders}
             formatter={formatter}
             timeAgo={timeAgo}
-            onBackToDashboard={() => setView('dashboard')}
+            buyerBrief={buyerBrief}
+            buyerBriefs={buyerBriefs}
+            favoriteGigIds={favoriteGigIds}
+            favoriteSellerIds={favoriteSellerIds}
+            savedGigs={savedGigs}
+            savedSellers={savedSellers}
+            onBackToDashboard={goToDashboard}
             onViewPublicProfile={handleViewPublicSellerProfile}
-            onOpenSellerTools={() => setView('seller')}
+            onOpenSellerTools={handleOpenSellerTools}
             onOpenChatFromGig={handleOpenChatFromGig}
+            onOpenGigFromOrder={handleOpenGigDetail}
+            onOpenGigFromSaved={handleOpenGigDetail}
+            onOpenSellerProfile={handleOpenSellerProfile}
+            onRequestOrderCancel={handleRequestOrderCancel}
+            onRequestOrderComplete={handleRequestOrderComplete}
+            onBuyerBriefChange={handleBuyerBriefChange}
+            onSubmitBuyerBrief={handleSubmitBuyerBrief}
+          />
+        )}
+
+        {view === 'seller-analytics' && (
+          <SellerAnalyticsView
+            user={user}
+            analytics={sellerAnalytics}
+            isLoading={isAnalyticsLoading}
+            error={analyticsError}
+            rangeDays={analyticsRangeDays}
+            slaHours={analyticsSlaHours}
+            onBackToDashboard={goToDashboard}
+            onOpenProfile={handleOpenMyProfile}
+            onOpenPublicProfile={handleViewPublicSellerProfile}
+            onRefresh={() => setAnalyticsRefreshKey((prev) => prev + 1)}
           />
         )}
 
 
-        {view === 'seller' && (
-          <SellerGigCreateView
+
+        {view === 'seller-dashboard' && (
+          <SellerDashboardView
             user={user}
-            userGigCount={userGigCount}
-            userSellerId={userSellerId}
-            inputClasses={inputClasses}
-            categoryOptions={categoryLabels}
-            newGig={newGig}
-            gigErrors={gigErrors}
-            gigMedia={gigMedia}
-            isUploadingMedia={isUploadingMedia}
-            myGigs={myGigs}
+            buyerOrders={buyerOrders}
+            sellerOrders={sellerOrders}
             formatter={formatter}
-            onOpenSellerProfile={handleOpenSellerProfile}
+            onOpenGigFromOrder={handleOpenGigDetail}
+            onOpenChatFromOrder={handleOpenChatFromOrder}
+            onRequestOrderCancel={handleRequestOrderCancel}
+            onRequestOrderComplete={handleRequestOrderComplete}
+            onBackToDashboard={goToDashboard}
+            onOpenProfile={handleOpenMyProfile}
             onOpenLogin={openLoginModal}
             onOpenSignup={openSignupModal}
             onStartApplication={startSellerApplication}
-            onGigChange={handleGigChange}
-            onAddPackage={handleAddPackage}
-            onPackageChange={handlePackageChange}
-            onRemovePackage={handleRemovePackage}
-            onGigFiles={handleGigFiles}
-            onRemoveGigMedia={handleRemoveGigMedia}
-            onCreateGig={handleCreateGig}
           />
         )}
 
@@ -1390,6 +2359,90 @@ const openSignupModal = () => {
           </section>
         )}
 
+        {view === 'verify-email' && (
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Verify email</p>
+              <h2 className="text-2xl font-semibold text-slate-900">Verify your email</h2>
+              <p className="text-sm text-slate-600">
+                Enter the verification code from your inbox to activate your account.
+              </p>
+            </div>
+            <form className="mt-5 grid gap-3 sm:grid-cols-2" onSubmit={handleVerifySubmit}>
+              <input
+                type="email"
+                className={inputClasses}
+                placeholder="Email address"
+                value={verifyForm.email}
+                onChange={(e) => setVerifyForm((prev) => ({ ...prev, email: e.target.value }))}
+              />
+              <input
+                className={inputClasses}
+                placeholder="Verification code"
+                value={verifyForm.token}
+                onChange={(e) => setVerifyForm((prev) => ({ ...prev, token: e.target.value }))}
+              />
+              <Button
+                type="submit"
+                className="bg-purple-600 text-white hover:bg-purple-500"
+                disabled={isVerifySubmitting}
+              >
+                {isVerifySubmitting ? 'Verifying...' : 'Verify email'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                onClick={handleResendVerification}
+                disabled={isVerifySubmitting}
+              >
+                Resend code
+              </Button>
+            </form>
+          </section>
+        )}
+
+        {view === 'reset-password' && (
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Reset password</p>
+              <h2 className="text-2xl font-semibold text-slate-900">Reset password</h2>
+              <p className="text-sm text-slate-600">
+                Use the link we emailed you to reset your account password.
+              </p>
+            </div>
+            <form className="mt-5 grid gap-3 sm:grid-cols-2" onSubmit={handleResetSubmit}>
+              <input
+                type="email"
+                className={inputClasses}
+                placeholder="Email address"
+                value={resetForm.email}
+                onChange={(e) => setResetForm((prev) => ({ ...prev, email: e.target.value }))}
+              />
+              <input
+                className={inputClasses}
+                placeholder="Reset code"
+                value={resetForm.token}
+                onChange={(e) => setResetForm((prev) => ({ ...prev, token: e.target.value }))}
+              />
+              <input
+                type="password"
+                className={inputClasses}
+                placeholder="New password"
+                value={resetForm.password}
+                onChange={(e) => setResetForm((prev) => ({ ...prev, password: e.target.value }))}
+              />
+              <Button
+                type="submit"
+                className="bg-purple-600 text-white hover:bg-purple-500"
+                disabled={isResetSubmitting}
+              >
+                {isResetSubmitting ? 'Saving...' : 'Update password'}
+              </Button>
+            </form>
+          </section>
+        )}
+
         <footer className="mt-10 w-full border-t border-slate-200 bg-white">
           <div className="mx-auto flex w-full flex-col gap-3 px-5 py-5 text-[11px] text-slate-700 sm:flex-row sm:items-center sm:justify-between sm:px-10 sm:text-xs">
             <p className="text-[11px] text-slate-700 sm:text-xs">
@@ -1407,7 +2460,7 @@ const openSignupModal = () => {
               <button
                 type="button"
                 className="text-slate-700 underline-offset-2 hover:underline"
-                onClick={() => setView('privacy')}
+                onClick={() => navigate('/privacy')}
               >
                 Privacy Policy
               </button>
@@ -1415,7 +2468,7 @@ const openSignupModal = () => {
               <button
                 type="button"
                 className="text-slate-700 underline-offset-2 hover:underline"
-                onClick={() => setView('terms')}
+                onClick={() => navigate('/terms')}
               >
                 Terms of Use
               </button>

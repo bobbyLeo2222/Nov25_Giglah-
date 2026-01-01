@@ -11,7 +11,15 @@ function GigDetailView({
   onOpenSellerProfile,
   onOpenChat,
   onOpenRelatedGig,
+  isFavorited = false,
+  onToggleFavorite,
+  inquiryDraft,
+  onInquiryChange,
+  onSubmitInquiry,
   relatedGigs = [],
+  onCreateOrder,
+  user,
+  userSellerId,
 }) {
   if (!gig) {
     return (
@@ -35,6 +43,13 @@ function GigDetailView({
     !primaryImage && gig.media ? gig.media.find((item) => item.type === 'video') : null
   const hasPackages = Array.isArray(gig.packages) && gig.packages.length > 0
 
+  const userId = user?._id || user?.id
+  const isOwner = Boolean(
+    user?.isSeller &&
+      ((gig.owner && userId && gig.owner === userId) ||
+        (userSellerId && gig.sellerId === userSellerId)),
+  )
+
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -52,10 +67,19 @@ function GigDetailView({
           </Button>
           <Button
             type="button"
+            variant="outline"
+            className={`border ${isFavorited ? 'border-rose-200 text-rose-700' : 'border-slate-200 text-slate-700'} hover:bg-rose-50`}
+            onClick={() => onToggleFavorite?.()}
+          >
+            {isFavorited ? 'Saved' : 'Save'}
+          </Button>
+          <Button
+            type="button"
             className="bg-purple-600 text-white hover:bg-purple-500"
             onClick={() => onOpenChat?.(gig)}
+            disabled={isOwner}
           >
-            Message seller
+            {isOwner ? 'This is your gig' : 'Message seller'}
           </Button>
         </div>
       </div>
@@ -240,6 +264,39 @@ function GigDetailView({
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Inquiry</p>
+                <p className="text-sm font-semibold text-slate-900">Share a brief with this seller</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                onClick={() => onCreateOrder?.()}
+              >
+                Request order
+              </Button>
+            </div>
+            <div className="mt-3 space-y-3">
+              <textarea
+                rows={4}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                placeholder="Tell the seller about your project, timeline, and budget."
+                value={inquiryDraft?.message || ''}
+                onChange={onInquiryChange?.('message')}
+              />
+              <Button
+                type="button"
+                className="w-full bg-purple-600 text-white hover:bg-purple-500"
+                onClick={() => onSubmitInquiry?.()}
+              >
+                Send inquiry
+              </Button>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4 shadow-sm">

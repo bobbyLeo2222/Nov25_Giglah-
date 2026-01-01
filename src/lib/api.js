@@ -4,6 +4,7 @@ const API_BASE =
   'http://localhost:5001'
 
 const TOKEN_STORAGE_KEY = 'giglah_token'
+const REFRESH_STORAGE_KEY = 'giglah_refresh_token'
 
 export const apiBase = API_BASE
 
@@ -12,12 +13,26 @@ export const getStoredToken = () => {
   return localStorage.getItem(TOKEN_STORAGE_KEY) || ''
 }
 
+export const getStoredRefreshToken = () => {
+  if (typeof localStorage === 'undefined') return ''
+  return localStorage.getItem(REFRESH_STORAGE_KEY) || ''
+}
+
 export const setStoredToken = (token) => {
   if (typeof localStorage === 'undefined') return
   if (token) {
     localStorage.setItem(TOKEN_STORAGE_KEY, token)
   } else {
     localStorage.removeItem(TOKEN_STORAGE_KEY)
+  }
+}
+
+export const setStoredRefreshToken = (token) => {
+  if (typeof localStorage === 'undefined') return
+  if (token) {
+    localStorage.setItem(REFRESH_STORAGE_KEY, token)
+  } else {
+    localStorage.removeItem(REFRESH_STORAGE_KEY)
   }
 }
 
@@ -52,4 +67,21 @@ export const fetchJSON = async (path, options = {}) => {
   }
   if (response.status === 204) return null
   return response.json()
+}
+
+export const refreshAccessToken = async () => {
+  const refreshToken = getStoredRefreshToken()
+  if (!refreshToken) throw new Error('No refresh token available')
+  const response = await fetch(`${API_BASE}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  })
+  if (!response.ok) throw new Error('Unable to refresh session')
+  const data = await response.json()
+  if (data?.token) {
+    setStoredToken(data.token)
+    return data.token
+  }
+  throw new Error('No token returned from refresh')
 }

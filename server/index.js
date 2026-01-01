@@ -10,6 +10,10 @@ import reviewRoutes from './routes/reviewRoutes.js'
 import chatRoutes from './routes/chatRoutes.js'
 import uploadRoutes from './routes/uploadRoutes.js'
 import contactRoutes from './routes/contactRoutes.js'
+import favoriteRoutes from './routes/favoriteRoutes.js'
+import inquiryRoutes from './routes/inquiryRoutes.js'
+import orderRoutes from './routes/orderRoutes.js'
+import analyticsRoutes from './routes/analyticsRoutes.js'
 
 const app = express()
 const PORT = process.env.PORT || 5001
@@ -32,6 +36,10 @@ app.use('/api/reviews', reviewRoutes)
 app.use('/api/chats', chatRoutes)
 app.use('/api/uploads', uploadRoutes)
 app.use('/api/contact', contactRoutes)
+app.use('/api/favorites', favoriteRoutes)
+app.use('/api/inquiries', inquiryRoutes)
+app.use('/api/orders', orderRoutes)
+app.use('/api/analytics', analyticsRoutes)
 
 app.use((req, res) => res.status(404).json({ message: 'Route not found' }))
 

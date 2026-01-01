@@ -1,7 +1,16 @@
 import { gigAccentClasses } from '@/data/static'
 import { ChatBubbleIcon, GlobeIcon, InstagramIcon } from '@/frontend/components/icons'
 
-function GigCard({ gig, index = 0, formatter, onOpenSellerProfile, onOpenChat, onOpenGig }) {
+function GigCard({
+  gig,
+  index = 0,
+  formatter,
+  onOpenSellerProfile,
+  onOpenChat,
+  onOpenGig,
+  isFavorited = false,
+  onToggleFavorite,
+}) {
   const primaryImage =
     gig.imageUrl || gig.media?.find((item) => item.type === 'image')?.url || ''
   const primaryVideo =
@@ -39,6 +48,17 @@ function GigCard({ gig, index = 0, formatter, onOpenSellerProfile, onOpenChat, o
         <span className="absolute bottom-3 left-3 rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-slate-700 backdrop-blur">
           {gig.category || 'General'}
         </span>
+        <button
+          type="button"
+          className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-rose-600 shadow-sm transition hover:bg-white"
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleFavorite?.()
+          }}
+          aria-label={isFavorited ? 'Unsave gig' : 'Save gig'}
+        >
+          {isFavorited ? 'Saved' : 'Save'}
+        </button>
       </div>
       <div className="flex flex-1 flex-col gap-3 px-4 py-4">
         <div>

@@ -9,6 +9,11 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ['buyer', 'seller', 'admin'], default: 'buyer' },
     avatarUrl: { type: String },
     googleId: { type: String },
+    emailVerified: { type: Boolean, default: false },
+    verificationTokenHash: { type: String },
+    verificationTokenExpiresAt: { type: Date },
+    resetTokenHash: { type: String },
+    resetTokenExpiresAt: { type: Date },
   },
   { timestamps: true },
 )

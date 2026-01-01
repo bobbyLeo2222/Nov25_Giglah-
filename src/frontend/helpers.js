@@ -50,37 +50,52 @@ const normalizeGigMedia = (media = []) => {
     .filter(Boolean)
 }
 
-const normalizeGig = (gig) => ({
-  id: gig._id || gig.id,
-  title: gig.title,
-  seller: gig.sellerName || gig.seller || 'Seller',
-  sellerId: gig.sellerId || gig.sellerProfile?.sellerId || gig.sellerProfile?._id || '',
-  category: gig.category || '',
-  packages: Array.isArray(gig.packages)
-    ? gig.packages.map((pkg) => ({
-        name: pkg.name || 'Package',
-        description: pkg.description || '',
-        price: Number(pkg.price) || 0,
-      }))
-    : [],
-  price: (() => {
-    const base = Number(gig.price) || 0
-    if (base > 0) return base
-    const packagePrices = (gig.packages || []).map((pkg) => Number(pkg.price) || 0)
-    const lowest = packagePrices.length ? Math.min(...packagePrices) : 0
-    return Number.isFinite(lowest) ? lowest : 0
-  })(),
-  status: gig.status || 'Published',
-  description: gig.description || '',
-  owner: gig.owner || null,
-  imageUrl: gig.imageUrl || '',
-  instagramUrl: gig.instagramUrl || '',
-  websiteUrl: gig.websiteUrl || '',
-  media: normalizeGigMedia(gig.media),
-})
+const normalizeGig = (gig) => {
+  const rawSeller = gig.seller
+  let sellerUserId = ''
+  if (typeof rawSeller === 'string' && /^[a-f0-9]{24}$/i.test(rawSeller)) {
+    sellerUserId = rawSeller
+  } else if (rawSeller?._id) {
+    sellerUserId = rawSeller._id.toString()
+  } else if (rawSeller?.toString) {
+    const maybe = rawSeller.toString()
+    sellerUserId = /^[a-f0-9]{24}$/i.test(maybe) ? maybe : ''
+  }
+
+  return {
+    id: gig._id || gig.id,
+    title: gig.title,
+    seller: gig.sellerName || gig.seller || 'Seller',
+    sellerUserId,
+    sellerId: gig.sellerId || gig.sellerProfile?.sellerId || gig.sellerProfile?._id || '',
+    category: gig.category || '',
+    packages: Array.isArray(gig.packages)
+      ? gig.packages.map((pkg) => ({
+          name: pkg.name || 'Package',
+          description: pkg.description || '',
+          price: Number(pkg.price) || 0,
+        }))
+      : [],
+    price: (() => {
+      const base = Number(gig.price) || 0
+      if (base > 0) return base
+      const packagePrices = (gig.packages || []).map((pkg) => Number(pkg.price) || 0)
+      const lowest = packagePrices.length ? Math.min(...packagePrices) : 0
+      return Number.isFinite(lowest) ? lowest : 0
+    })(),
+    status: gig.status || 'Published',
+    description: gig.description || '',
+    owner: gig.owner || null,
+    imageUrl: gig.imageUrl || '',
+    instagramUrl: gig.instagramUrl || '',
+    websiteUrl: gig.websiteUrl || '',
+    media: normalizeGigMedia(gig.media),
+  }
+}
 
 const normalizeProfile = (profile) => ({
   id: profile.sellerId || profile._id,
+  userId: profile.user?._id || '',
   name: profile.displayName || profile.user?.name || 'Seller',
   headline: profile.headline || 'Independent seller',
   about: profile.bio || 'Describe your expertise so buyers know what you do.',
@@ -101,6 +116,24 @@ const normalizeReview = (review) => ({
   comment: review.text || review.comment,
   project: review.project || 'Custom brief',
   createdAt: review.createdAt ? new Date(review.createdAt).getTime() : Date.now(),
+  isVerified: Boolean(review.isVerified || review.order),
+})
+
+const normalizeMessage = (msg) => ({
+  id: msg._id || msg.id,
+  senderId: msg.sender?._id || msg.sender?.id || msg.sender,
+  senderName: msg.senderName || msg.sender?.name || 'Member',
+  senderRole: msg.senderRole || 'buyer',
+  text: msg.text || '',
+  sentAt: msg.createdAt ? new Date(msg.createdAt).getTime() : msg.sentAt || Date.now(),
+  attachments: (msg.files || msg.attachments || []).map((file, index) => ({
+    id: file.id || `${msg._id || msg.id || 'file'}-${index}`,
+    name: file.name || 'Attachment',
+    sizeLabel: file.sizeLabel || formatFileSize(file.size || 0),
+    type: file.type || 'file',
+    url: file.url || '',
+  })),
+  readBy: (msg.readBy || []).map((id) => (typeof id === 'string' ? id : id?._id || id?.id)),
 })
 
 const mapUserFromApi = (apiUser) =>
@@ -115,6 +148,7 @@ export {
   mapUserFromApi,
   normalizeGig,
   normalizeGigMedia,
+  normalizeMessage,
   normalizeProfile,
   normalizeReview,
   timeAgo,
