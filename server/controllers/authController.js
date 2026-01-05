@@ -172,6 +172,8 @@ export const resetPassword = async (req, res) => {
   user.resetTokenHash = undefined
   user.resetTokenExpiresAt = undefined
   await user.save()
+  // Invalidate all existing refresh tokens for this user after a password reset
+  await RefreshToken.updateMany({ user: user._id, revokedAt: null }, { $set: { revokedAt: new Date() } })
   return res.json({ message: 'Password updated' })
 }
 

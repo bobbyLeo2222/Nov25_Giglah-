@@ -93,20 +93,39 @@ const normalizeGig = (gig) => {
   }
 }
 
+const parseLanguages = (languages = []) =>
+  (languages || []).map((entry) => {
+    if (typeof entry === 'string') {
+      const match = entry.match(/^(.*)\s+\((.*)\)$/)
+      if (match) return { language: match[1], level: match[2] }
+      return { language: entry, level: '' }
+    }
+    if (entry && typeof entry === 'object') {
+      return { language: entry.language || entry.name || '', level: entry.level || entry.fluency || '' }
+    }
+    return null
+  }).filter(Boolean)
+
 const normalizeProfile = (profile) => ({
   id: profile.sellerId || profile._id,
   userId: profile.user?._id || '',
+  displayName: profile.displayName || profile.user?.name || 'Seller',
   name: profile.displayName || profile.user?.name || 'Seller',
   headline: profile.headline || 'Independent seller',
-  about: profile.bio || 'Describe your expertise so buyers know what you do.',
+  bio: profile.bio || profile.about || '',
+  about: profile.bio || profile.about || 'Describe your expertise so buyers know what you do.',
   location: profile.location || 'Location not set',
   avatar: profile.imageUrl || defaultAvatar,
   heroImage: profile.imageUrl || defaultHeroImage,
   specialties: profile.skills || ['Custom engagements', 'Flexible timelines'],
-  languages: profile.languages || [],
-  stats: profile.stats || { projects: 0, response: 'ƒ?"', repeat: 'ƒ?"' },
+  skills: profile.skills || [],
+  languages: parseLanguages(profile.languages),
+  stats: profile.stats || { projects: 0, response: '—', repeat: '—' },
   socials: { website: profile.websiteUrl || '', instagram: profile.instagramUrl || '' },
+  websiteUrl: profile.websiteUrl || '',
+  instagramUrl: profile.instagramUrl || '',
   availability: profile.availability || 'Available',
+  languagesRaw: profile.languages || [],
 })
 
 const normalizeReview = (review) => ({

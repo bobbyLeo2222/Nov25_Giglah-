@@ -95,7 +95,14 @@ export const upsertProfile = asyncHandler(async (req, res) => {
     }
   }
 
-  await profile.save()
+  try {
+    await profile.save()
+  } catch (error) {
+    if (error?.code === 11000 && error?.keyPattern?.sellerId) {
+      return res.status(409).json({ message: 'Display name is taken. Choose another.' })
+    }
+    throw error
+  }
 
   const userUpdate = {}
   if (payload.displayName) userUpdate.name = payload.displayName

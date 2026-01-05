@@ -98,6 +98,7 @@ function App() {
   const [chatSearch, setChatSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('')
   const [isLoadingData, setIsLoadingData] = useState(false)
+  const [showLoadingBanner, setShowLoadingBanner] = useState(false)
   const [dataError, setDataError] = useState('')
   const [gigFilters, setGigFilters] = useState({
     search: '',
@@ -130,6 +131,7 @@ function App() {
   const [analyticsRangeDays, setAnalyticsRangeDays] = useState(30)
   const [analyticsSlaHours, setAnalyticsSlaHours] = useState(24)
   const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0)
+  const [hasSyncedSellerProfile, setHasSyncedSellerProfile] = useState(false)
   const authedFetch = (path, options = {}) => fetchJSON(path, { ...options, token: authToken })
   const persistAuth = (token, apiUser, refreshToken) => {
     setAuthToken(token || '')
@@ -284,6 +286,15 @@ function App() {
       return
     }
 
+    if (location.pathname === '/seller-tools') {
+      setView(user?.isSeller ? 'seller-dashboard' : 'seller-apply')
+      return
+    }
+    if (location.pathname === '/seller/apply') {
+      setView('seller-apply')
+      return
+    }
+
     const sellerMatch = matchPath('/seller/:sellerId', location.pathname)
     if (sellerMatch?.params?.sellerId) {
       setSelectedSellerId(sellerMatch.params.sellerId)
@@ -319,14 +330,6 @@ function App() {
       setView('user-profile')
       return
     }
-    if (location.pathname === '/seller-tools') {
-      navigate('/seller-tools')
-      return
-    }
-    if (location.pathname === '/seller/apply') {
-      setView('seller-apply')
-      return
-    }
     if (location.pathname === '/verify-email') {
       setView('verify-email')
       return
@@ -336,7 +339,7 @@ function App() {
       return
     }
     setView('dashboard')
-  }, [location.pathname])
+  }, [location.pathname, navigate, user?.isSeller])
 
   useEffect(() => {
     syncViewFromPath()
@@ -403,6 +406,11 @@ function App() {
     })
     return slides
   }, [])
+
+  const categoryOptions = useMemo(
+    () => serviceCategories.flatMap((group) => group.items.map((item) => item.label)),
+    [],
+  )
 
   const currentSlide = serviceSlides[currentServiceSlide] || serviceSlides[0] || null
 
@@ -530,6 +538,15 @@ function App() {
     }
     loadGigs()
   }, [gigFilters])
+
+  useEffect(() => {
+    if (!isLoadingData) {
+      setShowLoadingBanner(false)
+      return
+    }
+    const id = setTimeout(() => setShowLoadingBanner(true), 250)
+    return () => clearTimeout(id)
+  }, [isLoadingData])
 
   useEffect(() => {
     if (!authToken || !user) {
@@ -734,13 +751,10 @@ function App() {
         if (!normalized) return
         setChatThreads((prev) => {
           const others = prev.filter((thread) => thread.id !== normalized.id)
-          return [normalized, ...others]
-        })
-        setUnreadTotal((prev) => {
-          const others = chatThreads
-            .filter((thread) => thread.id !== normalized.id)
-            .reduce((sum, thread) => sum + (thread.unreadCount || 0), 0)
-          return others + (normalized.unreadCount || 0)
+          const nextThreads = [normalized, ...others]
+          const totalUnread = nextThreads.reduce((sum, thread) => sum + (thread.unreadCount || 0), 0)
+          setUnreadTotal(totalUnread)
+          return nextThreads
         })
       })
       .catch((error) => {
@@ -749,7 +763,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [authToken, chatThreads, normalizeThread, selectedThreadId, user])
+  }, [authToken, normalizeThread, selectedThreadId, user])
 
   const ensureSellerProfile = (sellerId, sellerName, extras = {}) => {
     if (!sellerId) return
@@ -804,7 +818,13 @@ function App() {
     const sellerId = userSellerId || buildSellerId(user.email || user.name || '')
     ensureSellerProfile(sellerId, user.name || 'Member')
     setSelectedSellerId(sellerId)
+    setView('user-profile')
     navigate('/me')
+  }
+
+  const handleOpenSellerDashboard = () => {
+    if (!user) return
+    setView('seller-analytics')
   }
 
   const handleViewPublicSellerProfile = () => {
@@ -813,6 +833,63 @@ function App() {
     ensureSellerProfile(sellerId, user.name || 'Member')
     setSelectedSellerId(sellerId)
     navigate(`/seller/${sellerId}`)
+  }
+
+  const handleRefreshMySellerProfile = async () => {
+    if (!user || !authToken) return null
+    try {
+      const data = await authedFetch('/api/profiles/me')
+      if (data?.profile) {
+        const normalized = normalizeProfile(data.profile)
+        setSellerProfiles((prev) => {
+          const filtered = prev.filter((profile) => profile.id !== normalized.id && profile._id !== normalized.id)
+          return [...filtered, normalized]
+        })
+        return normalized
+      }
+    } catch (error) {
+      setMessage(error.message || 'Unable to load seller profile.')
+    }
+    return null
+  }
+
+  useEffect(() => {
+    if (user?.isSeller && authToken && !hasSyncedSellerProfile) {
+      handleRefreshMySellerProfile().finally(() => setHasSyncedSellerProfile(true))
+    }
+    // We intentionally omit handleRefreshMySellerProfile from deps to avoid re-sync loops.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, hasSyncedSellerProfile, user?.isSeller])
+
+  const handleUpdateSellerProfile = async (updates) => {
+    if (!user || !authToken) {
+      setMessage('Please sign in to update your seller profile.')
+      return
+    }
+    try {
+      setMessage('Saving your seller profile...')
+      const data = await authedFetch('/api/profiles/me', {
+        method: 'PUT',
+        body: updates,
+      })
+      const updatedProfile = data?.profile
+      if (updatedProfile) {
+        const normalized = normalizeProfile(updatedProfile)
+        setSellerProfiles((prev) => {
+          const filtered = prev.filter(
+            (profile) => profile.id !== normalized.id && profile._id !== normalized.id,
+          )
+          return [...filtered, normalized]
+        })
+      }
+      if (updates.displayName) {
+        setUser((prev) => (prev ? { ...prev, name: updates.displayName } : prev))
+      }
+      setMessage('Seller profile updated.')
+    } catch (error) {
+      setMessage(error.message || 'Unable to update seller profile.')
+      throw error
+    }
   }
 
   const handleCategorySelect = (label) => {
@@ -840,10 +917,6 @@ function App() {
 
   const handleOpenProfile = () => {
     if (!user) return
-    if (user.isSeller) {
-      setView('seller-analytics')
-      return
-    }
     handleOpenMyProfile()
   }
 
@@ -1748,6 +1821,7 @@ const openSignupModal = () => {
     }
     setSellerError('')
     setSellerForm(initialSellerForm)
+    setView('seller-apply')
     navigate('/seller/apply')
   }
 
@@ -1821,6 +1895,13 @@ const openSignupModal = () => {
     }))
   }
 
+  const normalizeSingaporePhone = (value) => {
+    const digits = (value || '').replace(/\D/g, '')
+    if (digits.length === 8) return `+65${digits}`
+    if (digits.length === 10 && digits.startsWith('65')) return `+65${digits.slice(-8)}`
+    return null
+  }
+
   const handleSellerUpgrade = async (event) => {
     event.preventDefault()
     if (!user || !authToken) {
@@ -1830,6 +1911,11 @@ const openSignupModal = () => {
     const { fullName, displayName, description, phone, skills, languages } = sellerForm
     if (!fullName || !displayName || !description || !phone) {
       setSellerError('Complete your name, display details, description, and phone number.')
+      return
+    }
+    const normalizedPhone = normalizeSingaporePhone(phone)
+    if (!normalizedPhone) {
+      setSellerError('Enter a valid Singapore number in +65XXXXXXXX format (8 digits).')
       return
     }
     if (skills.length === 0) {
@@ -1851,7 +1937,7 @@ const openSignupModal = () => {
       languages: languageList,
       websiteUrl: sellerForm.website.trim(),
       instagramUrl: sellerForm.instagram.trim(),
-      phone: phone.trim(),
+      phone: normalizedPhone,
       availability: 'Available',
     }
     try {
@@ -2011,7 +2097,7 @@ const openSignupModal = () => {
             {message}
           </div>
         )}
-        {isLoadingData && (
+        {showLoadingBanner && (
           <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600 shadow-sm">
             Loading the latest marketplace data...
           </div>
@@ -2148,6 +2234,10 @@ const openSignupModal = () => {
             onBackToDashboard={goToDashboard}
             onViewPublicProfile={handleViewPublicSellerProfile}
             onOpenSellerTools={handleOpenSellerTools}
+            onOpenSellerDashboard={handleOpenSellerDashboard}
+            onRefreshSellerProfile={handleRefreshMySellerProfile}
+            onUpdateSellerProfile={handleUpdateSellerProfile}
+            competencyLevels={competencyLevels}
             onOpenChatFromGig={handleOpenChatFromGig}
             onOpenGigFromOrder={handleOpenGigDetail}
             onOpenGigFromSaved={handleOpenGigDetail}
@@ -2181,6 +2271,14 @@ const openSignupModal = () => {
             user={user}
             buyerOrders={buyerOrders}
             sellerOrders={sellerOrders}
+            newGig={newGig}
+            gigErrors={gigErrors}
+            gigMedia={gigMedia}
+            isUploadingMedia={isUploadingMedia}
+            userSellerId={userSellerId}
+            inputClasses={sellerInputClasses}
+            categoryOptions={categoryOptions}
+            myGigs={myGigs}
             formatter={formatter}
             onOpenGigFromOrder={handleOpenGigDetail}
             onOpenChatFromOrder={handleOpenChatFromOrder}
@@ -2191,6 +2289,14 @@ const openSignupModal = () => {
             onOpenLogin={openLoginModal}
             onOpenSignup={openSignupModal}
             onStartApplication={startSellerApplication}
+            onOpenSellerProfile={handleOpenSellerProfile}
+            onGigChange={handleGigChange}
+            onAddPackage={handleAddPackage}
+            onPackageChange={handlePackageChange}
+            onRemovePackage={handleRemovePackage}
+            onGigFiles={handleGigFiles}
+            onRemoveGigMedia={handleRemoveGigMedia}
+            onCreateGig={handleCreateGig}
           />
         )}
 

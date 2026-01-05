@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import SellerGigCreateView from '@/frontend/views/SellerGigCreateView.jsx'
 
 const statusStyles = {
   pending: 'bg-amber-50 text-amber-700 border-amber-100',
@@ -16,6 +17,14 @@ function SellerDashboardView({
   user,
   buyerOrders = [],
   sellerOrders = [],
+  newGig,
+  gigErrors,
+  gigMedia,
+  isUploadingMedia,
+  userSellerId,
+  inputClasses,
+  categoryOptions = [],
+  myGigs = [],
   formatter,
   onOpenGigFromOrder,
   onOpenChatFromOrder,
@@ -26,6 +35,14 @@ function SellerDashboardView({
   onOpenLogin,
   onOpenSignup,
   onStartApplication,
+  onOpenSellerProfile,
+  onGigChange,
+  onAddPackage,
+  onPackageChange,
+  onRemovePackage,
+  onGigFiles,
+  onRemoveGigMedia,
+  onCreateGig,
 }) {
   const [ordersTab, setOrdersTab] = useState('incoming')
 
@@ -92,12 +109,13 @@ function SellerDashboardView({
   }
 
   return (
-    <section className="-mx-4 rounded-[36px] border border-slate-200 bg-white p-10 shadow-lg sm:-mx-8 sm:p-12 lg:-mx-12">
-      <div className="rounded-[28px] border border-purple-100 bg-gradient-to-br from-purple-50 via-white to-amber-50 px-6 py-6 shadow-sm sm:px-8 sm:py-7">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-500">Seller tools</p>
-            <h2 className="mt-2 text-4xl font-semibold text-slate-900 sm:text-5xl">Orders & gigs</h2>
+    <>
+      <section className="-mx-4 rounded-[36px] border border-slate-200 bg-white p-10 shadow-lg sm:-mx-8 sm:p-12 lg:-mx-12">
+        <div className="rounded-[28px] border border-purple-100 bg-gradient-to-br from-purple-50 via-white to-amber-50 px-6 py-6 shadow-sm sm:px-8 sm:py-7">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-500">Seller tools</p>
+              <h2 className="mt-2 text-4xl font-semibold text-slate-900 sm:text-5xl">Orders & gigs</h2>
             <p className="mt-2 text-base text-slate-600 sm:text-lg">
               Track orders like Fiverr and keep your gigs updated in one place.
             </p>
@@ -280,8 +298,34 @@ function SellerDashboardView({
             )
           })}
         </div>
-      </div>
-    </section>
+        </div>
+      </section>
+
+      <SellerGigCreateView
+        user={user}
+        userGigCount={myGigs.length}
+        userSellerId={userSellerId}
+        inputClasses={inputClasses}
+        categoryOptions={categoryOptions}
+        newGig={newGig}
+        gigErrors={gigErrors}
+        gigMedia={gigMedia}
+        isUploadingMedia={isUploadingMedia}
+        myGigs={myGigs}
+        formatter={formatter}
+        onOpenSellerProfile={onOpenSellerProfile}
+        onOpenLogin={onOpenLogin}
+        onOpenSignup={onOpenSignup}
+        onStartApplication={onStartApplication}
+        onGigChange={onGigChange}
+        onAddPackage={onAddPackage}
+        onPackageChange={onPackageChange}
+        onRemovePackage={onRemovePackage}
+        onGigFiles={onGigFiles}
+        onRemoveGigMedia={onRemoveGigMedia}
+        onCreateGig={onCreateGig}
+      />
+    </>
   )
 }
 

@@ -2,7 +2,7 @@ import RefreshToken from '../models/RefreshToken.js'
 import User from '../models/User.js'
 import { verifyAccessToken } from '../utils/tokens.js'
 
-export const authRequired = (req, res, next) => {
+export const authRequired = async (req, res, next) => {
   if (!process.env.JWT_SECRET) {
     return res.status(500).json({ message: 'JWT secret is not configured' })
   }

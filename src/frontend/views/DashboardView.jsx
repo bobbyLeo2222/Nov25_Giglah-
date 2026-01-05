@@ -26,108 +26,6 @@ function DashboardView({
 }) {
   return (
     <>
-      <header className="rounded-3xl border border-purple-100 bg-white/90 p-6 shadow-sm">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold text-slate-900 md:text-3xl">
-            Find gigs and freelancers instantly.
-          </h1>
-        </div>
-
-        <div className="mt-5 flex flex-col gap-3 lg:flex-row">
-          <div className="flex flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-            <input
-              className="w-full border-none bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-              placeholder="Search for categories, freelancers and gigs..."
-              value={gigFilters.search || ''}
-              onChange={(event) => onGigFilterChange?.('search', event.target.value)}
-            />
-            <Button
-              className="bg-purple-600 text-white hover:bg-purple-500"
-              type="button"
-              onClick={() => onGigFilterChange?.('search', gigFilters.search || '')}
-            >
-              Search
-            </Button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="font-semibold text-slate-700">Try:</span>
-            {['Digital Marketing', 'AI & Data Science', 'Video Production & Editing'].map((label) => (
-              <button
-                key={label}
-                type="button"
-                className="rounded-full border border-slate-200 px-3 py-1 hover:border-purple-200 hover:text-purple-600"
-                onClick={() => onGigFilterChange?.('category', label)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sort</label>
-            <select
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-              value={gigFilters.sort || 'newest'}
-              onChange={(event) => onGigFilterChange?.('sort', event.target.value)}
-            >
-              <option value="newest">Newest</option>
-              <option value="price-asc">Price: Low to High</option>
-              <option value="price-desc">Price: High to Low</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Min price</label>
-            <input
-              type="number"
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-              value={gigFilters.minPrice || ''}
-              placeholder="0"
-              onChange={(event) => onGigFilterChange?.('minPrice', event.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Max price</label>
-            <input
-              type="number"
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-              value={gigFilters.maxPrice || ''}
-              placeholder="5000"
-              onChange={(event) => onGigFilterChange?.('maxPrice', event.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Category</label>
-            <select
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-              value={gigFilters.category || ''}
-              onChange={(event) => onGigFilterChange?.('category', event.target.value)}
-            >
-              <option value="">All</option>
-              {serviceCategories.flatMap((group) => group.items).map((item) => (
-                <option key={item.label} value={item.label}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-600">
-          <span className="font-semibold text-slate-900">
-            Showing {gigs.length} of {totalGigs} gigs
-          </span>
-          <button
-            type="button"
-            className="text-sm font-semibold text-purple-700 hover:underline"
-            onClick={() => onClearGigFilters?.()}
-          >
-            Clear filters
-          </button>
-        </div>
-      </header>
-
       <main className="space-y-6">
         <section className="-mx-4 md:-mx-8 lg:-mx-12">
           <div className="relative overflow-hidden rounded-3xl bg-slate-900 text-white shadow-xl">
@@ -253,6 +151,108 @@ function DashboardView({
             </div>
           </div>
         </section>
+
+        <header className="rounded-3xl border border-purple-100 bg-white/90 p-6 shadow-sm">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-2xl font-semibold text-slate-900 md:text-3xl">
+              Find gigs and freelancers instantly.
+            </h1>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 lg:flex-row">
+            <div className="flex flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <input
+                className="w-full border-none bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                placeholder="Search for categories, freelancers and gigs..."
+                value={gigFilters.search || ''}
+                onChange={(event) => onGigFilterChange?.('search', event.target.value)}
+              />
+              <Button
+                className="bg-purple-600 text-white hover:bg-purple-500"
+                type="button"
+                onClick={() => onGigFilterChange?.('search', gigFilters.search || '')}
+              >
+                Search
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="font-semibold text-slate-700">Try:</span>
+              {['Digital Marketing', 'AI & Data Science', 'Video Production & Editing'].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="rounded-full border border-slate-200 px-3 py-1 hover:border-purple-200 hover:text-purple-600"
+                  onClick={() => onGigFilterChange?.('category', label)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sort</label>
+              <select
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                value={gigFilters.sort || 'newest'}
+                onChange={(event) => onGigFilterChange?.('sort', event.target.value)}
+              >
+                <option value="newest">Newest</option>
+                <option value="price-asc">Price: Low to High</option>
+                <option value="price-desc">Price: High to Low</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Min price</label>
+              <input
+                type="number"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                value={gigFilters.minPrice || ''}
+                placeholder="0"
+                onChange={(event) => onGigFilterChange?.('minPrice', event.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Max price</label>
+              <input
+                type="number"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                value={gigFilters.maxPrice || ''}
+                placeholder="5000"
+                onChange={(event) => onGigFilterChange?.('maxPrice', event.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Category</label>
+              <select
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                value={gigFilters.category || ''}
+                onChange={(event) => onGigFilterChange?.('category', event.target.value)}
+              >
+                <option value="">All</option>
+                {serviceCategories.flatMap((group) => group.items).map((item) => (
+                  <option key={item.label} value={item.label}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-600">
+            <span className="font-semibold text-slate-900">
+              Showing {gigs.length} of {totalGigs} gigs
+            </span>
+            <button
+              type="button"
+              className="text-sm font-semibold text-purple-700 hover:underline"
+              onClick={() => onClearGigFilters?.()}
+            >
+              Clear filters
+            </button>
+          </div>
+        </header>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">

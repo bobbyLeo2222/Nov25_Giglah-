@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import RatingStars from '@/frontend/components/RatingStars'
 
@@ -16,9 +17,13 @@ function UserProfileView({
   favoriteSellerIds = [],
   savedGigs = [],
   savedSellers = [],
+  competencyLevels = [],
   onBackToDashboard,
   onViewPublicProfile,
   onOpenSellerTools,
+  onOpenSellerDashboard,
+  onRefreshSellerProfile,
+  onUpdateSellerProfile,
   onOpenChatFromGig,
   onOpenGigFromOrder,
   onOpenGigFromSaved,
@@ -28,6 +33,142 @@ function UserProfileView({
   onBuyerBriefChange,
   onSubmitBuyerBrief,
 }) {
+  const [isEditingSeller, setIsEditingSeller] = useState(false)
+  const [sellerForm, setSellerForm] = useState({
+    displayName: '',
+    headline: '',
+    about: '',
+    location: '',
+    availability: '',
+    websiteUrl: '',
+    instagramUrl: '',
+    skills: [],
+    skillInput: '',
+    languages: [],
+    languageSelection: '',
+    levelSelection: '',
+  })
+  const [isSavingSeller, setIsSavingSeller] = useState(false)
+  const [sellerSaveMessage, setSellerSaveMessage] = useState('')
+  const [isLoadingSellerProfile, setIsLoadingSellerProfile] = useState(false)
+
+  const fillSellerForm = (source) => {
+    if (!source) return
+    const languagesSource = source.languages && source.languages.length ? source.languages : source.languagesRaw || []
+    const parsedLanguages = languagesSource.map((entry) => {
+      if (entry && typeof entry === 'object' && entry.language) return entry
+      if (typeof entry === 'string') {
+        const match = entry.match(/^(.*)\s+\((.*)\)$/)
+        if (match) return { language: match[1], level: match[2] }
+        return { language: entry, level: '' }
+      }
+      return null
+    }).filter(Boolean)
+    setSellerForm({
+      displayName: source.displayName || source.name || user?.name || '',
+      headline: source.headline || '',
+      about: source.bio || source.about || '',
+    availability: source.availability || '',
+    websiteUrl: source.websiteUrl || source.socials?.website || '',
+    instagramUrl: source.instagramUrl || source.socials?.instagram || '',
+      skills: source.skills || source.specialties || [],
+      skillInput: '',
+      languages: parsedLanguages,
+      languageSelection: '',
+      levelSelection: '',
+    })
+  }
+
+  useEffect(() => {
+    if (!isEditingSeller) {
+      fillSellerForm(profile)
+    }
+  }, [profile, user, isEditingSeller])
+
+  const handleSellerFormChange = (field) => (event) => {
+    setSellerForm((prev) => ({ ...prev, [field]: event.target.value }))
+  }
+
+  const handleAddSkill = (event) => {
+    event.preventDefault()
+    const skill = sellerForm.skillInput.trim()
+    if (!skill) return
+    if (sellerForm.skills.includes(skill)) return
+    setSellerForm((prev) => ({
+      ...prev,
+      skills: [...prev.skills, skill],
+      skillInput: '',
+    }))
+  }
+
+  const handleRemoveSkill = (skill) => {
+    setSellerForm((prev) => ({
+      ...prev,
+      skills: prev.skills.filter((item) => item !== skill),
+    }))
+  }
+
+  const handleAddLanguage = (event) => {
+    event.preventDefault()
+    const { languageSelection, levelSelection, languages } = sellerForm
+    if (!languageSelection || !levelSelection) return
+    if (languages.some((entry) => entry.language === languageSelection)) return
+    setSellerForm((prev) => ({
+      ...prev,
+      languages: [...prev.languages, { language: languageSelection, level: levelSelection }],
+      languageSelection: '',
+      levelSelection: '',
+    }))
+  }
+
+  const handleRemoveLanguage = (language) => {
+    setSellerForm((prev) => ({
+      ...prev,
+      languages: prev.languages.filter((item) => item.language !== language),
+    }))
+  }
+
+  const handleToggleEditSeller = async () => {
+    if (isEditingSeller) {
+      setIsEditingSeller(false)
+      return
+    }
+    if (onRefreshSellerProfile) {
+      setIsLoadingSellerProfile(true)
+      const latest = await onRefreshSellerProfile()
+      if (latest) fillSellerForm(latest)
+      setIsLoadingSellerProfile(false)
+    }
+    setIsEditingSeller(true)
+  }
+
+  const handleSellerSave = async (event) => {
+    event.preventDefault()
+    if (!onUpdateSellerProfile) return
+    setIsSavingSeller(true)
+    setSellerSaveMessage('')
+    try {
+      await onUpdateSellerProfile({
+        displayName: sellerForm.displayName.trim(),
+        headline: sellerForm.headline.trim(),
+        bio: sellerForm.about.trim(),
+        availability: sellerForm.availability.trim(),
+        websiteUrl: sellerForm.websiteUrl.trim(),
+        instagramUrl: sellerForm.instagramUrl.trim(),
+        skills: sellerForm.skills,
+        languages: sellerForm.languages.map((entry) =>
+          entry.level ? `${entry.language} (${entry.level})` : entry.language,
+        ),
+      })
+      setSellerSaveMessage('Seller profile updated.')
+      setIsEditingSeller(false)
+    } catch (error) {
+      setSellerSaveMessage(error.message || 'Unable to update seller profile.')
+    } finally {
+      setIsSavingSeller(false)
+    }
+  }
+
   if (!user) {
     return (
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -78,16 +219,33 @@ function UserProfileView({
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="px-5 text-slate-700" onClick={onBackToDashboard}>
-              Dashboard
-            </Button>
             {user.isSeller ? (
-              <Button type="button" className="px-5 bg-purple-600 text-white hover:bg-purple-500" onClick={onViewPublicProfile}>
-                View public profile
+              <Button
+                type="button"
+                variant="outline"
+                className="px-5 text-slate-700"
+                onClick={onOpenSellerDashboard}
+              >
+                Seller dashboard
               </Button>
             ) : (
               <Button type="button" className="px-5 bg-purple-600 text-white hover:bg-purple-500" onClick={onOpenSellerTools}>
                 Become a seller
+              </Button>
+            )}
+            {user.isSeller && (
+              <Button
+                type="button"
+                variant="outline"
+                className="px-5 text-slate-700"
+                onClick={handleToggleEditSeller}
+                disabled={isLoadingSellerProfile}
+              >
+                {isLoadingSellerProfile
+                  ? 'Loading...'
+                  : isEditingSeller
+                  ? 'Cancel edit'
+                  : 'Edit seller info'}
               </Button>
             )}
           </div>
@@ -119,18 +277,197 @@ function UserProfileView({
               </div>
             </div>
 
+            {user.isSeller && isEditingSeller && (
+              <form
+                className="space-y-4 rounded-2xl border border-purple-100 bg-purple-50/50 px-6 py-5 shadow-sm"
+                onSubmit={handleSellerSave}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Seller info</p>
+                    <p className="text-sm text-slate-600">Update your public seller details.</p>
+                  </div>
+                  <Button
+                    type="submit"
+                    className="bg-purple-600 text-white hover:bg-purple-500"
+                    disabled={isSavingSeller}
+                  >
+                    {isSavingSeller ? 'Saving…' : 'Save changes'}
+                  </Button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                    placeholder="Display name"
+                    value={sellerForm.displayName}
+                    onChange={handleSellerFormChange('displayName')}
+                    required
+                  />
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                    placeholder="Headline"
+                    value={sellerForm.headline}
+                    onChange={handleSellerFormChange('headline')}
+                  />
+                </div>
+                <textarea
+                  rows={3}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                  placeholder="About / bio"
+                  value={sellerForm.about}
+                  onChange={handleSellerFormChange('about')}
+                />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                    placeholder="Availability"
+                    value={sellerForm.availability}
+                    onChange={handleSellerFormChange('availability')}
+                  />
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                    placeholder="Website URL"
+                    value={sellerForm.websiteUrl}
+                    onChange={handleSellerFormChange('websiteUrl')}
+                  />
+                </div>
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                  placeholder="Instagram URL"
+                  value={sellerForm.instagramUrl}
+                  onChange={handleSellerFormChange('instagramUrl')}
+                />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Skills
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-xs"
+                      onClick={handleAddSkill}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                      placeholder="e.g., Web development"
+                      value={sellerForm.skillInput}
+                      onChange={handleSellerFormChange('skillInput')}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {sellerForm.skills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="flex items-center gap-2 rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700"
+                      >
+                        {skill}
+                        <button
+                          type="button"
+                          className="text-purple-500 hover:text-purple-700"
+                          onClick={() => handleRemoveSkill(skill)}
+                          aria-label={`Remove ${skill}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Languages
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-xs"
+                      onClick={handleAddLanguage}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <select
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                      value={sellerForm.languageSelection}
+                      onChange={handleSellerFormChange('languageSelection')}
+                    >
+                      <option value="">Select language</option>
+                      {['English', 'Mandarin', 'Malay', 'Tamil', 'Bahasa Indonesia', 'Hindi', 'Tagalog', 'Thai'].map(
+                        (language) => (
+                          <option key={language} value={language}>
+                            {language}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                    <select
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                      value={sellerForm.levelSelection}
+                      onChange={handleSellerFormChange('levelSelection')}
+                    >
+                      <option value="">Select level</option>
+                      {competencyLevels.map((level) => (
+                        <option key={level} value={level}>
+                          {level}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {sellerForm.languages.map((entry) => (
+                      <span
+                        key={entry.language}
+                        className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+                      >
+                        {entry.language}
+                        {entry.level ? ` (${entry.level})` : ''}
+                        <button
+                          type="button"
+                          className="text-slate-500 hover:text-slate-700"
+                          onClick={() => handleRemoveLanguage(entry.language)}
+                          aria-label={`Remove ${entry.language}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {sellerSaveMessage && (
+                  <p className="text-xs font-semibold text-slate-600">{sellerSaveMessage}</p>
+                )}
+              </form>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="rounded-2xl border border-slate-100 bg-white px-5 py-5 shadow-sm">
                 <p className="text-xs font-semibold text-slate-500">Rating</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <RatingStars rating={ratingSummary.average} />
-                  <span className="text-lg font-semibold text-slate-900">
-                    {ratingSummary.average ? `${ratingSummary.average}/5` : 'No reviews yet'}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500">
-                  {ratingSummary.count} review{ratingSummary.count === 1 ? '' : 's'} received
-                </p>
+                {ratingSummary.count > 0 ? (
+                  <>
+                    <div className="mt-2 flex items-center gap-2">
+                      <RatingStars rating={ratingSummary.average} />
+                      <span className="text-lg font-semibold text-slate-900">
+                        {ratingSummary.average}/5
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {ratingSummary.count} review{ratingSummary.count === 1 ? '' : 's'} received
+                    </p>
+                  </>
+                ) : (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-2xl font-semibold text-slate-900">—</p>
+                    <p className="text-xs text-slate-500">No reviews yet</p>
+                  </div>
+                )}
               </div>
               <div className="rounded-2xl border border-slate-100 bg-white px-5 py-5 shadow-sm">
                 <p className="text-xs font-semibold text-slate-500">Gigs published</p>

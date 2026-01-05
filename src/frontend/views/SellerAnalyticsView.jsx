@@ -46,13 +46,13 @@ function SellerAnalyticsView({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" className="px-5 text-slate-700" onClick={onBackToDashboard}>
-            Dashboard
+            Marketplace
           </Button>
           <Button variant="outline" className="px-5 text-slate-700" onClick={onOpenProfile}>
             Private profile
           </Button>
           <Button variant="outline" className="px-5 text-slate-700" onClick={onOpenPublicProfile}>
-            Seller profile
+            Public profile
           </Button>
           <Button type="button" className="px-5 bg-purple-600 text-white hover:bg-purple-500" onClick={onRefresh}>
             Refresh
