@@ -1139,8 +1139,10 @@ function App() {
       setMessage('Log in to place an order.')
       return
     }
-    if (user.isSeller) {
-      setMessage('Switch to buyer mode to place an order.')
+    const userId = user._id || user.id
+    const isOwnGig = gig.sellerUserId === userId || gig.owner === userId
+    if (isOwnGig) {
+      setMessage('You cannot start an order on your own gig.')
       return
     }
     try {
@@ -1168,10 +1170,6 @@ function App() {
     if (!selectedThread) return
     if (!user || !authToken) {
       setMessage('Log in to start a gig.')
-      return
-    }
-    if (user.isSeller) {
-      setMessage('Switch to buyer mode to start a gig.')
       return
     }
     if (!selectedThread.gigId) {
