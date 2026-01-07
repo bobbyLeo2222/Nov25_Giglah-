@@ -72,6 +72,7 @@ function App() {
     packages: '',
   })
   const [message, setMessage] = useState('')
+  const [reviewPrompt, setReviewPrompt] = useState(null)
   const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [showSignupPassword, setShowSignupPassword] = useState(false)
   const [formErrors, setFormErrors] = useState({
@@ -1039,6 +1040,10 @@ function App() {
         body: { status, cancelReason },
       })
       if (data?.order) {
+        const userId = user?._id || user?.id
+        const orderSellerId = data.order.sellerId || ''
+        const orderComplete = data.order.status === 'complete'
+        const isBuyer = data.order.buyer?.toString?.() === userId || data.order.buyer === userId
         setBuyerOrders((prev) =>
           prev.map((order) =>
             order._id === orderId || order.id === orderId ? data.order : order,
@@ -1056,6 +1061,12 @@ function App() {
               ? 'Completion recorded.'
               : 'Order updated.',
         )
+        if (orderComplete && isBuyer && orderSellerId) {
+          setReviewPrompt({
+            sellerId: orderSellerId,
+            gigTitle: data.order.gigTitle || 'this gig',
+          })
+        }
       }
     } catch (error) {
       setMessage(error.message || 'Unable to update order.')
@@ -2080,8 +2091,9 @@ const openSignupModal = () => {
       setMessage('Log in as a buyer to leave a review.')
       return
     }
-    if (user.isSeller) {
-      setMessage('Switch to buyer mode to review sellers.')
+    const userId = user._id || user.id
+    if (selectedSeller?.userId && selectedSeller.userId === userId) {
+      setMessage('You cannot review your own profile.')
       return
     }
     const hasQualifyingOrder = buyerOrders.some(
@@ -2154,6 +2166,35 @@ const openSignupModal = () => {
         {message && (
           <div className="rounded-2xl border border-purple-100 bg-purple-50/60 px-4 py-3 text-sm font-medium text-purple-800 shadow-sm">
             {message}
+          </div>
+        )}
+        {reviewPrompt && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-4 text-sm text-amber-900 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="font-semibold">
+                Order complete for {reviewPrompt.gigTitle}. Leave a review for the seller?
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  className="bg-purple-600 text-white hover:bg-purple-500"
+                  onClick={() => {
+                    handleOpenSellerProfile(reviewPrompt.sellerId)
+                    setReviewPrompt(null)
+                  }}
+                >
+                  Leave review
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                  onClick={() => setReviewPrompt(null)}
+                >
+                  Later
+                </Button>
+              </div>
+            </div>
           </div>
         )}
         {showLoadingBanner && (

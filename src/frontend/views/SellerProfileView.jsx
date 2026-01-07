@@ -43,6 +43,16 @@ function SellerProfileView({
   const savedSellerCount = savedSellers.length
   const responseTime = selectedSeller.stats?.response || '—'
   const repeatClients = selectedSeller.stats?.repeat || '—'
+  const formatLanguage = (entry) => {
+    if (!entry) return ''
+    if (typeof entry === 'string') return entry
+    if (typeof entry === 'object') {
+      const name = entry.language || entry.name || ''
+      const level = entry.level ? ` (${entry.level})` : ''
+      return name ? `${name}${level}` : ''
+    }
+    return String(entry)
+  }
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
@@ -147,11 +157,20 @@ function SellerProfileView({
                       {selectedSeller.availability}
                     </span>
                   )}
-                  {selectedSeller.languages.map((language) => (
-                    <span key={language} className="rounded-full bg-white px-3 py-1 font-semibold text-slate-600">
-                      {language}
-                    </span>
-                  ))}
+                  {selectedSeller.languages.map((language, index) => {
+                    const label = formatLanguage(language)
+                    if (!label) return null
+                    const keyBase =
+                      typeof language === 'string' ? language : language.language || language.name || index
+                    return (
+                      <span
+                        key={`${keyBase}-${index}`}
+                        className="rounded-full bg-white px-3 py-1 font-semibold text-slate-600"
+                      >
+                        {label}
+                      </span>
+                    )
+                  })}
                 </div>
               </div>
             </div>
@@ -201,14 +220,20 @@ function SellerProfileView({
               <div className="mt-4">
                 <p className="text-sm font-semibold text-slate-900">Languages</p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {selectedSeller.languages.map((language) => (
-                    <span
-                      key={language}
-                      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
-                    >
-                      {language}
-                    </span>
-                  ))}
+                  {selectedSeller.languages.map((language, index) => {
+                    const label = formatLanguage(language)
+                    if (!label) return null
+                    const keyBase =
+                      typeof language === 'string' ? language : language.language || language.name || index
+                    return (
+                      <span
+                        key={`${keyBase}-${index}`}
+                        className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+                      >
+                        {label}
+                      </span>
+                    )
+                  })}
                 </div>
               </div>
             </div>
@@ -513,9 +538,6 @@ function SellerProfileView({
                   Post review
                 </Button>
                 {!user && <p className="text-xs font-semibold text-amber-600">Log in to post a review.</p>}
-                {user?.isSeller && (
-                  <p className="text-xs font-semibold text-amber-600">Switch to buyer mode to review another seller.</p>
-                )}
               </div>
             </form>
           )}
