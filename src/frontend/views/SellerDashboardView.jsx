@@ -122,7 +122,7 @@ function SellerDashboardView({
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="px-5 text-slate-700" onClick={onBackToDashboard}>
-              Dashboard
+              Marketplace
             </Button>
             <Button variant="outline" className="px-5 text-slate-700" onClick={onOpenProfile}>
               Profile

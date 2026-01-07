@@ -24,7 +24,7 @@ function SellerAnalyticsView({
             Analytics are available for sellers once you are signed in.
           </p>
           <Button type="button" className="bg-purple-600 text-white hover:bg-purple-500" onClick={onBackToDashboard}>
-            Back to dashboard
+            Back to Marketplace
           </Button>
         </div>
       </section>
