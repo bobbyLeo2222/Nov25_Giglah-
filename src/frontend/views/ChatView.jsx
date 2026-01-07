@@ -17,6 +17,8 @@ function ChatView({
   onSendMessage,
   onViewGig,
   onStartGig,
+  pendingOrderId = '',
+  onAcceptGig,
   isOwnGig = false,
   onTyping,
   user,
@@ -113,14 +115,15 @@ function ChatView({
                   >
                     View gig
                   </Button>
-                  <Button
-                    type="button"
-                    className="bg-purple-600 text-white hover:bg-purple-500"
-                    onClick={() => onStartGig?.()}
-                    disabled={!selectedThread?.gigId || isOwnGig}
-                  >
-                    Start gig
-                  </Button>
+                  {pendingOrderId && isOwnGig && (
+                    <Button
+                      type="button"
+                      className="bg-emerald-600 text-white hover:bg-emerald-500"
+                      onClick={() => onAcceptGig?.(pendingOrderId)}
+                    >
+                      Accept gig
+                    </Button>
+                  )}
                 </div>
               </div>
 

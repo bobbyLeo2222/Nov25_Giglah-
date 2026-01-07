@@ -278,6 +278,20 @@ function App() {
     [sellerReviews, userSellerId],
   )
 
+  const pendingChatOrder = useMemo(() => {
+    if (!selectedThread || !user?.isSeller) return null
+    const buyerId = selectedThread.buyerUserId || ''
+    return (
+      sellerOrders.find((order) => {
+        if (!order || order.status !== 'pending') return false
+        if (order.gigId !== selectedThread.gigId) return false
+        const orderBuyer =
+          order.buyer?._id?.toString?.() || order.buyer?.toString?.() || order.buyer || ''
+        return buyerId && orderBuyer && orderBuyer.toString() === buyerId.toString()
+      }) || null
+    )
+  }, [selectedThread, sellerOrders, user])
+
   const syncViewFromPath = useCallback(() => {
     const gigMatch = matchPath('/gig/:gigId', location.pathname)
     if (gigMatch?.params?.gigId) {
@@ -2197,6 +2211,8 @@ const openSignupModal = () => {
             onSendMessage={handleSendMessage}
             onViewGig={handleViewGigFromChat}
             onStartGig={handleStartGigFromChat}
+            pendingOrderId={pendingChatOrder?._id || pendingChatOrder?.id || ''}
+            onAcceptGig={handleRequestOrderAccept}
             isOwnGig={
               Boolean(
                 selectedThread &&
