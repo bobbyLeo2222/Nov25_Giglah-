@@ -1012,6 +1012,7 @@ function App() {
             size: file.size || 0,
             sizeLabel: formatFileSize(file.size || 0),
             previewUrl: dataUrl,
+            file,
           }
         }),
       )
@@ -1294,13 +1295,48 @@ function App() {
       return
     }
 
+    const uploadChatFiles = async (files) =>
+      Promise.all(
+        files.map(async (file) => {
+          const fallback = {
+            ...file,
+            uploadedUrl: file.url || file.previewUrl || '',
+            uploadedType: file.type || 'file',
+          }
+          if (!file?.file) return fallback
+          try {
+            const formData = new FormData()
+            formData.append('file', file.file)
+            const data = await authedFetch('/api/uploads/media', {
+              method: 'POST',
+              body: formData,
+            })
+            return {
+              ...file,
+              uploadedUrl: data?.url || file.previewUrl || '',
+              uploadedType: file.type || data?.type || 'file',
+            }
+          } catch (error) {
+            return fallback
+          }
+        }),
+      )
+
+    let uploadedFiles = []
+    if (composerFiles.length > 0) {
+      uploadedFiles = await uploadChatFiles(composerFiles)
+      if (uploadedFiles.some((file) => !file.uploadedUrl)) {
+        setMessage('Some attachments could not be uploaded. Sending preview only.')
+      }
+    }
+
     const payload = {
       text,
-      files: composerFiles.map((file) => ({
+      files: uploadedFiles.map((file) => ({
         name: file.name,
-        type: file.type,
+        type: file.type || file.uploadedType || 'file',
         size: file.size || 0,
-        url: file.previewUrl || '',
+        url: file.uploadedUrl || '',
       })),
       gigId: selectedThread.gigId || selectedGig?.id || '',
       gigTitle: selectedThread.gigTitle || selectedGig?.title || '',
@@ -1358,13 +1394,13 @@ function App() {
             senderName: user?.name || 'Member',
             text,
             sentAt: now,
-            attachments: composerFiles.map((file) => ({
+            attachments: uploadedFiles.map((file) => ({
               id: file.id,
               name: file.name,
-              type: file.type,
+              type: file.type || file.uploadedType || 'file',
               sizeLabel: file.sizeLabel,
-              previewUrl: file.previewUrl,
-              url: file.previewUrl,
+              previewUrl: file.previewUrl || file.uploadedUrl,
+              url: file.uploadedUrl || file.previewUrl,
             })),
           }
 

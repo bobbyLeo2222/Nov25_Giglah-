@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { formatChatTime, timeAgo } from '@/frontend/helpers'
 
@@ -23,6 +24,9 @@ function ChatView({
   onTyping,
   user,
 }) {
+  const [previewAttachment, setPreviewAttachment] = useState(null)
+  const [previewZoom, setPreviewZoom] = useState(1)
+
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-1">
@@ -167,8 +171,16 @@ function ChatView({
                         {msg.attachments?.length > 0 && (
                           <div className="mt-2 space-y-2 text-xs">
                             {msg.attachments.map((file) => {
-                              const isImage = file.type?.startsWith?.('image/')
+                              const fileName = (file.name || '').toLowerCase()
+                              const fileUrl = (file.url || file.previewUrl || '').toLowerCase()
+                              const isImage =
+                                file.type?.startsWith?.('image/') ||
+                                file.type === 'image' ||
+                                /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(fileName) ||
+                                /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(fileUrl)
                               const preview = file.previewUrl || file.url || ''
+                              const showPreview = Boolean(preview && isImage)
+                              const showDownload = Boolean(file.url)
                               return (
                                 <div
                                   key={file.id}
@@ -190,16 +202,33 @@ function ChatView({
                                         {file.sizeLabel}
                                       </span>
                                     </div>
-                                    {preview ? (
-                                      <a
-                                        href={preview}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className={isOwn ? 'text-white/80 underline' : 'text-slate-500 underline'}
-                                      >
-                                        View attachment
-                                      </a>
-                                    ) : null}
+                                    <div className="mt-1 flex flex-wrap gap-2 text-[11px] font-semibold">
+                                      {showPreview && (
+                                        <button
+                                          type="button"
+                                          className={isOwn ? 'text-white/80 underline' : 'text-slate-500 underline'}
+                                          onClick={() => {
+                                            setPreviewZoom(1)
+                                            setPreviewAttachment({
+                                              name: file.name,
+                                              url: preview,
+                                              isImage,
+                                            })
+                                          }}
+                                        >
+                                          Preview
+                                        </button>
+                                      )}
+                                      {showDownload && (
+                                        <a
+                                          href={file.url}
+                                          download
+                                          className={isOwn ? 'text-white/80 underline' : 'text-slate-500 underline'}
+                                        >
+                                          Download
+                                        </a>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               )
@@ -219,7 +248,13 @@ function ChatView({
                 {composerFiles.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {composerFiles.map((file) => {
-                      const isImage = file.type?.startsWith?.('image/')
+                      const fileName = (file.name || '').toLowerCase()
+                      const previewUrl = (file.previewUrl || '').toLowerCase()
+                      const isImage =
+                        file.type?.startsWith?.('image/') ||
+                        file.type === 'image' ||
+                        /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(fileName) ||
+                        /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(previewUrl)
                       return (
                         <span
                           key={file.id}
@@ -273,6 +308,69 @@ function ChatView({
           )}
         </div>
       </div>
+
+      {previewAttachment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4"
+          onClick={() => setPreviewAttachment(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="relative max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="relative z-10 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">{previewAttachment.name}</p>
+              <div className="flex items-center gap-2">
+                {previewAttachment.isImage && (
+                  <>
+                    <button
+                      type="button"
+                      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                      onClick={() => setPreviewZoom((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))))}
+                    >
+                      -
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                      onClick={() => setPreviewZoom((prev) => Math.min(3, Number((prev + 0.25).toFixed(2))))}
+                    >
+                      +
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                  onClick={() => setPreviewAttachment(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 max-h-[75vh] overflow-auto rounded-xl bg-slate-50 p-3">
+              {previewAttachment.isImage ? (
+                <img
+                  src={previewAttachment.url}
+                  alt={previewAttachment.name}
+                  className="mx-auto block max-h-[70vh] w-auto rounded-xl object-contain"
+                  style={{ transform: `scale(${previewZoom})`, transformOrigin: 'center' }}
+                />
+              ) : (
+                <a
+                  href={previewAttachment.url}
+                  download
+                  className="inline-flex items-center rounded-full bg-purple-600 px-4 py-2 text-xs font-semibold text-white hover:bg-purple-500"
+                >
+                  Download file
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
