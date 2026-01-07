@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button'
+﻿import { Button } from '@/components/ui/button'
 import { serviceCategories } from '@/data/static'
 import GigCard from '@/frontend/components/GigCard'
 
@@ -50,7 +50,7 @@ function DashboardView({
                     onClick={() => onPrevSlide?.()}
                     aria-label="Previous service"
                   >
-                    <span className="text-xl">ƒ?1</span>
+                    <span className="text-xl">&larr;</span>
                   </button>
                   <button
                     type="button"
@@ -58,7 +58,7 @@ function DashboardView({
                     onClick={() => onNextSlide?.()}
                     aria-label="Next service"
                   >
-                    <span className="text-xl">ƒ?§</span>
+                    <span className="text-xl">&rarr;</span>
                   </button>
                 </div>
               </div>

@@ -41,13 +41,15 @@ function TopBar({
           >
             <img src={logo} alt="GigLah! logo" className="h-16 w-auto sm:h-20 md:h-24" />
           </button>
-          <Button
-            variant="ghost"
-            className="h-11 px-5 text-base font-semibold text-slate-800 hover:bg-slate-100"
-            onClick={onSellerTools}
-          >
-            {user?.isSeller ? 'Seller tools' : 'Become a Seller'}
-          </Button>
+          {user?.isSeller && (
+            <Button
+              variant="ghost"
+              className="h-11 px-5 text-base font-semibold text-slate-800 hover:bg-slate-100"
+              onClick={onSellerTools}
+            >
+              Seller tools
+            </Button>
+          )}
         </div>
         {user ? (
           <>
@@ -55,9 +57,11 @@ function TopBar({
               <button type="button" className="transition hover:text-purple-600" onClick={onChat}>
                 Messages
               </button>
-              <button type="button" className="transition hover:text-purple-600" onClick={onSellerTools}>
-                Seller tools
-              </button>
+              {user.isSeller && (
+                <button type="button" className="transition hover:text-purple-600" onClick={onSellerTools}>
+                  Seller tools
+                </button>
+              )}
               <button
                 type="button"
                 className="text-left text-slate-500 transition hover:text-purple-600"
@@ -101,13 +105,15 @@ function TopBar({
                 <button type="button" className="w-full text-left transition hover:text-purple-600" onClick={() => run(onChat)}>
                   Messages
                 </button>
-                <button
-                  type="button"
-                  className="w-full text-left transition hover:text-purple-600"
-                  onClick={() => run(onSellerTools)}
-                >
-                  Seller tools
-                </button>
+                {user.isSeller && (
+                  <button
+                    type="button"
+                    className="w-full text-left transition hover:text-purple-600"
+                    onClick={() => run(onSellerTools)}
+                  >
+                    Seller tools
+                  </button>
+                )}
                 <button type="button" className="w-full text-left transition hover:text-purple-600" onClick={() => run(onProfile)}>
                   View profile
                 </button>

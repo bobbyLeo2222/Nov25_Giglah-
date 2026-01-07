@@ -9,7 +9,7 @@ const RatingStars = ({ rating = 0 }) => (
           key={index}
           className={filled ? 'text-amber-500' : faded ? 'text-amber-300' : 'text-slate-300'}
         >
-          ƒ~.
+          ★
         </span>
       )
     })}

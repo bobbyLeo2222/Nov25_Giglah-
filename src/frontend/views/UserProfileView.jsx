@@ -496,63 +496,6 @@ function UserProfileView({
                 )}
               </div>
 
-              <div className="mt-4">
-                <form
-                  className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4 shadow-sm"
-                  onSubmit={onSubmitBuyerBrief}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-900">Project intake brief</p>
-                    <span className="text-xs text-slate-500">{buyerBriefs.length} saved</span>
-                  </div>
-                  <div className="mt-3 space-y-3">
-                    <input
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                      placeholder="Project type (e.g. Brand refresh, 30s video)"
-                      value={buyerBrief?.projectType || ''}
-                      onChange={onBuyerBriefChange?.('projectType')}
-                    />
-                    <input
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                      placeholder="Category"
-                      value={buyerBrief?.category || ''}
-                      onChange={onBuyerBriefChange?.('category')}
-                    />
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <input
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                        placeholder="Budget range"
-                        value={buyerBrief?.budget || ''}
-                        onChange={onBuyerBriefChange?.('budget')}
-                      />
-                      <input
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                        placeholder="Ideal timeline"
-                        value={buyerBrief?.timeline || ''}
-                        onChange={onBuyerBriefChange?.('timeline')}
-                      />
-                    </div>
-                    <textarea
-                      rows={3}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                      placeholder="Goals, success metrics, and must-haves"
-                      value={buyerBrief?.goals || ''}
-                      onChange={onBuyerBriefChange?.('goals')}
-                    />
-                    <textarea
-                      rows={2}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                      placeholder="Notes for the seller (optional)"
-                      value={buyerBrief?.notes || ''}
-                      onChange={onBuyerBriefChange?.('notes')}
-                    />
-                    <Button type="submit" className="w-full bg-purple-600 text-white hover:bg-purple-500">
-                      Save brief
-                    </Button>
-                  </div>
-                </form>
-              </div>
-
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
                   <div className="flex items-center justify-between gap-2">

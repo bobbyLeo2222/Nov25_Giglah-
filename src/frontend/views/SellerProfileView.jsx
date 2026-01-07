@@ -175,7 +175,7 @@ function SellerProfileView({
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
                 <p className="text-xs font-semibold text-slate-500">Rating</p>
                 <div className="mt-2 flex items-center gap-2">
@@ -197,11 +197,6 @@ function SellerProfileView({
                 <p className="text-xs font-semibold text-slate-500">Response time</p>
                 <p className="text-2xl font-semibold text-slate-900">{responseTime}</p>
                 <p className="text-xs text-slate-500">Avg first reply</p>
-              </div>
-              <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
-                <p className="text-xs font-semibold text-slate-500">Repeat clients</p>
-                <p className="text-2xl font-semibold text-slate-900">{repeatClients}</p>
-                <p className="text-xs text-slate-500">Based on past projects</p>
               </div>
             </div>
 

@@ -124,6 +124,16 @@ function ChatView({
                       Accept gig
                     </Button>
                   )}
+                  {!isOwnGig && (
+                    <Button
+                      type="button"
+                      className="bg-purple-600 text-white hover:bg-purple-500"
+                      onClick={() => onStartGig?.()}
+                      disabled={!selectedThread?.gigId}
+                    >
+                      Start gig
+                    </Button>
+                  )}
                 </div>
               </div>
 
