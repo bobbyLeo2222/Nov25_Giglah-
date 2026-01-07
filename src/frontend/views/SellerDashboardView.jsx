@@ -28,6 +28,7 @@ function SellerDashboardView({
   formatter,
   onOpenGigFromOrder,
   onOpenChatFromOrder,
+  onRequestOrderAccept,
   onRequestOrderCancel,
   onRequestOrderComplete,
   onBackToDashboard,
@@ -203,6 +204,8 @@ function SellerDashboardView({
             const awaitingOther = (buyerCompleted || sellerCompleted) && !otherCompleted
             const canMarkComplete =
               !yourCompleted && order.status !== 'complete' && order.status !== 'cancelled'
+            const canAcceptOrder =
+              ordersTab === 'incoming' && order.status === 'pending' && isSeller
             const messageLabel = ordersTab === 'incoming'
               ? 'Message buyer'
               : ordersTab === 'outgoing'
@@ -272,6 +275,15 @@ function SellerDashboardView({
                   >
                     {messageLabel}
                   </Button>
+                  {canAcceptOrder && (
+                    <Button
+                      type="button"
+                      className="bg-purple-600 text-white hover:bg-purple-500"
+                      onClick={() => onRequestOrderAccept?.(orderId)}
+                    >
+                      Accept order
+                    </Button>
+                  )}
                   {order.status !== 'complete' && order.status !== 'cancelled' && (
                     <>
                       <Button

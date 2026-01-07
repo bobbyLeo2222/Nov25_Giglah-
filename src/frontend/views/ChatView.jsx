@@ -16,6 +16,8 @@ function ChatView({
   onRemoveComposerFile,
   onSendMessage,
   onViewGig,
+  onStartGig,
+  isOwnGig = false,
   onTyping,
   user,
 }) {
@@ -102,14 +104,24 @@ function ChatView({
                     {selectedThread.sellerName} &mdash; {selectedThread.buyerName || 'Buyer'}
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                  onClick={() => onViewGig?.()}
-                >
-                  View gig
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                    onClick={() => onViewGig?.()}
+                  >
+                    View gig
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-purple-600 text-white hover:bg-purple-500"
+                    onClick={() => onStartGig?.()}
+                    disabled={!selectedThread?.gigId || isOwnGig}
+                  >
+                    Start gig
+                  </Button>
+                </div>
               </div>
 
               <div className="mt-3 flex-1 space-y-3 overflow-y-auto rounded-xl bg-slate-50 px-3 py-3">

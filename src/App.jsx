@@ -1061,6 +1061,10 @@ function App() {
     handleUpdateOrderStatus(orderId, 'complete')
   }
 
+  const handleRequestOrderAccept = (orderId) => {
+    handleUpdateOrderStatus(orderId, 'in_progress')
+  }
+
   const handleToggleFavoriteGig = async (gig) => {
     if (!user || !authToken) {
       setMessage('Log in to save gigs.')
@@ -1129,7 +1133,7 @@ function App() {
     }
   }
 
-  const handleCreateOrder = async (gig) => {
+  const handleCreateOrder = async (gig, { notes } = {}) => {
     if (!gig) return
     if (!user || !authToken) {
       setMessage('Log in to place an order.')
@@ -1140,6 +1144,7 @@ function App() {
       return
     }
     try {
+      const orderNotes = notes ?? inquiryDraft.message ?? ''
       const data = await authedFetch('/api/orders', {
         method: 'POST',
         body: {
@@ -1147,7 +1152,7 @@ function App() {
           gigTitle: gig.title,
           sellerId: gig.sellerId || gig.owner || '',
           price: gig.price || 0,
-          notes: inquiryDraft.message || '',
+          notes: orderNotes,
         },
       })
       if (data?.order) {
@@ -1157,6 +1162,48 @@ function App() {
     } catch (error) {
       setMessage(error.message || 'Unable to create order right now.')
     }
+  }
+
+  const handleStartGigFromChat = async () => {
+    if (!selectedThread) return
+    if (!user || !authToken) {
+      setMessage('Log in to start a gig.')
+      return
+    }
+    if (user.isSeller) {
+      setMessage('Switch to buyer mode to start a gig.')
+      return
+    }
+    if (!selectedThread.gigId) {
+      setMessage('This chat is not linked to a gig yet.')
+      return
+    }
+
+    let gig = gigs.find((item) => item.id === selectedThread.gigId) || null
+    if (!gig) {
+      try {
+        const data = await fetchJSON(`/api/gigs/${selectedThread.gigId}`)
+        gig = normalizeGig(data?.gig || data)
+      } catch (error) {
+        setMessage(error.message || 'Unable to load the gig details.')
+        return
+      }
+    }
+
+    if (!gig) {
+      setMessage('Unable to locate this gig.')
+      return
+    }
+
+    const existingOrder = buyerOrders.find(
+      (order) => order.gigId === gig.id && order.status !== 'cancelled',
+    )
+    if (existingOrder) {
+      setMessage('An order for this gig is already in progress.')
+      return
+    }
+
+    await handleCreateOrder(gig, { notes: '' })
   }
 
   const ensureThreadForGig = async (gig, { forceCreate = false } = {}) => {
@@ -2151,6 +2198,16 @@ const openSignupModal = () => {
             onRemoveComposerFile={handleRemoveComposerFile}
             onSendMessage={handleSendMessage}
             onViewGig={handleViewGigFromChat}
+            onStartGig={handleStartGigFromChat}
+            isOwnGig={
+              Boolean(
+                selectedThread &&
+                  user &&
+                  (selectedThread.sellerUserId === (user._id || user.id) ||
+                    gigs.find((gig) => gig.id === selectedThread.gigId)?.sellerUserId ===
+                      (user._id || user.id)),
+              )
+            }
             onTyping={() => {
               if (!selectedThread?.id || !authToken) return
               authedFetch(`/api/chats/${selectedThread.id}/typing`, {
@@ -2282,6 +2339,7 @@ const openSignupModal = () => {
             formatter={formatter}
             onOpenGigFromOrder={handleOpenGigDetail}
             onOpenChatFromOrder={handleOpenChatFromOrder}
+            onRequestOrderAccept={handleRequestOrderAccept}
             onRequestOrderCancel={handleRequestOrderCancel}
             onRequestOrderComplete={handleRequestOrderComplete}
             onBackToDashboard={goToDashboard}
