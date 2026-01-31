@@ -1,7 +1,14 @@
-const API_BASE =
-  import.meta.env.VITE_API_BASE ||
-  import.meta.env.REACT_APP_API_BASE ||
-  'http://localhost:5001'
+const viteEnv = import.meta.env || {}
+const envApiBase = viteEnv.VITE_API_BASE ?? viteEnv.REACT_APP_API_BASE
+
+const fallbackApiBase =
+  typeof window === 'undefined'
+    ? 'http://localhost:5001'
+    : viteEnv.DEV
+      ? 'http://localhost:5001'
+      : window.location.origin
+
+const API_BASE = envApiBase ?? fallbackApiBase
 
 const TOKEN_STORAGE_KEY = 'giglah_token'
 const REFRESH_STORAGE_KEY = 'giglah_refresh_token'

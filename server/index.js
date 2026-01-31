@@ -2,6 +2,9 @@ import './config/env.js'
 import express from 'express'
 import cors from 'cors'
 import morgan from 'morgan'
+import fs from 'node:fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import connectDB from './config/db.js'
 import authRoutes from './routes/authRoutes.js'
 import profileRoutes from './routes/profileRoutes.js'
@@ -17,6 +20,10 @@ import analyticsRoutes from './routes/analyticsRoutes.js'
 
 const app = express()
 const PORT = process.env.PORT || 5001
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const clientDistDir = path.resolve(__dirname, '..', 'dist')
 
 const allowedOrigins = process.env.CLIENT_ORIGIN
   ? process.env.CLIENT_ORIGIN.split(',').map((origin) => origin.trim())
@@ -40,6 +47,16 @@ app.use('/api/favorites', favoriteRoutes)
 app.use('/api/inquiries', inquiryRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/analytics', analyticsRoutes)
+
+// Serve the built Vite app in production (DigitalOcean App Platform typically runs a single Node service).
+const hasClientBuild = fs.existsSync(path.join(clientDistDir, 'index.html'))
+if (process.env.NODE_ENV === 'production' || hasClientBuild) {
+  app.use(express.static(clientDistDir))
+  app.get(/.*/, (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path === '/health') return next()
+    res.sendFile(path.join(clientDistDir, 'index.html'))
+  })
+}
 
 app.use((req, res) => res.status(404).json({ message: 'Route not found' }))
 

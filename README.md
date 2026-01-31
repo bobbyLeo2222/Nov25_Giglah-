@@ -1,16 +1,29 @@
-# React + Vite
+# GigLah
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Full-stack app:
+- Frontend: React + Vite (build output in `dist/`)
+- Backend: Express API in `server/`
 
-Currently, two official plugins are available:
+## Local development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+```bash
+npm install
+npm run dev
+```
 
-## React Compiler
+## Production (DigitalOcean App Platform)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+This repo is set up so a single Node service can serve both:
+- API routes under `/api/*`
+- The built frontend from `dist/` (including SPA fallback to `dist/index.html`)
 
-## Expanding the ESLint configuration
+Recommended App Platform settings:
+- **Build Command:** `npm run build`
+- **Run Command:** `npm start`
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Minimum environment variables to set in DigitalOcean:
+- `MONGODB_URI`
+- `JWT_SECRET`
+- `CLIENT_ORIGIN` (e.g. `https://your-app.ondigitalocean.app`)
+
+If you use the email / Cloudinary / Google features, also set the corresponding variables from `server/.env` in DigitalOcean (do not commit secrets).
