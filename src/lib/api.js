@@ -1,14 +1,30 @@
-const viteEnv = import.meta.env || {}
-const envApiBase = viteEnv.VITE_API_BASE ?? viteEnv.REACT_APP_API_BASE
+const envApiBase =
+  import.meta.env.VITE_API_BASE || import.meta.env.REACT_APP_API_BASE || ''
 
-const fallbackApiBase =
-  typeof window === 'undefined'
-    ? 'http://localhost:5001'
-    : viteEnv.DEV
+const isLocalHostname =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1')
+
+let API_BASE = envApiBase
+if (!API_BASE) {
+  API_BASE =
+    typeof window === 'undefined'
       ? 'http://localhost:5001'
-      : window.location.origin
+      : import.meta.env.DEV
+        ? 'http://localhost:5001'
+        : window.location.origin
+}
 
-const API_BASE = envApiBase ?? fallbackApiBase
+// Prevent accidental production builds hardcoding localhost API URLs.
+if (
+  typeof window !== 'undefined' &&
+  !import.meta.env.DEV &&
+  !isLocalHostname &&
+  (API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1'))
+) {
+  API_BASE = window.location.origin
+}
 
 const TOKEN_STORAGE_KEY = 'giglah_token'
 const REFRESH_STORAGE_KEY = 'giglah_refresh_token'
@@ -49,18 +65,38 @@ const normalizeBody = (body) => {
   return JSON.stringify(body)
 }
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 export const fetchJSON = async (path, options = {}) => {
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`
   const token = options.token ?? getStoredToken()
   const body = normalizeBody(options.body)
   const isFormData = body instanceof FormData
+  const method = (options.method || 'GET').toUpperCase()
   const headers = {
     ...(options.headers || {}),
     ...(body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
 
-  const response = await fetch(url, { ...options, headers, body })
+  const maxAttempts = method === 'GET' ? 3 : 1
+  let response
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      response = await fetch(url, { ...options, headers, body })
+      break
+    } catch (error) {
+      const isFinalAttempt = attempt === maxAttempts
+      if (!isFinalAttempt) {
+        await delay(300 * attempt)
+        continue
+      }
+      throw new Error(
+        `Unable to reach API at ${API_BASE}. Ensure the server is running on port 5001.`,
+      )
+    }
+  }
+
   if (!response.ok) {
     const text = await response.text()
     let message = text

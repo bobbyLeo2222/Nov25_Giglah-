@@ -2,6 +2,10 @@ import Gig from '../models/Gig.js'
 import SellerProfile from '../models/SellerProfile.js'
 import asyncHandler from '../utils/asyncHandler.js'
 import normalizeUrl from '../utils/normalizeUrl.js'
+import escapeRegExp from '../utils/escapeRegExp.js'
+
+const GIG_IMAGE_LIMIT = 10
+const GIG_VIDEO_LIMIT = 3
 
 const maybeNormalizeUrl = (value) => (value === undefined ? undefined : normalizeUrl(value))
 
@@ -37,6 +41,12 @@ const normalizeMedia = (value) => {
     .map(normalizeMediaItem)
     .filter(Boolean)
   return normalized
+}
+
+const validateMediaLimits = (media = []) => {
+  const imageCount = media.filter((item) => item.type !== 'video').length
+  const videoCount = media.filter((item) => item.type === 'video').length
+  return imageCount <= GIG_IMAGE_LIMIT && videoCount <= GIG_VIDEO_LIMIT
 }
 
 const normalizePackages = (value) => {
@@ -75,11 +85,15 @@ const pickGigFields = (body = {}) => ({
 
 const buildSearchQuery = ({ category, sellerId, search, status, minPrice, maxPrice }) => {
   const query = {}
-  if (category) query.category = { $regex: new RegExp(category, 'i') }
+  if (category) {
+    const safeCategory = escapeRegExp(category)
+    query.category = { $regex: new RegExp(safeCategory, 'i') }
+  }
   if (status) query.status = status
-  if (search) {
-    const regex = new RegExp(search, 'i')
-    query.$or = [{ title: regex }, { description: regex }]
+  const trimmedSearch = search ? String(search).trim() : ''
+  if (trimmedSearch) {
+    const regex = new RegExp(escapeRegExp(trimmedSearch), 'i')
+    query.$or = [{ title: regex }, { description: regex }, { sellerName: regex }]
   }
   if (sellerId) query.sellerId = sellerId
   if (minPrice !== undefined || maxPrice !== undefined) {
@@ -126,6 +140,11 @@ export const createGig = asyncHandler(async (req, res) => {
   }
 
   const payload = pickGigFields(req.body)
+  if (payload.media && !validateMediaLimits(payload.media)) {
+    return res.status(400).json({
+      message: `You can upload up to ${GIG_IMAGE_LIMIT} images and ${GIG_VIDEO_LIMIT} videos per gig.`,
+    })
+  }
   if ((!payload.price || Number(payload.price) <= 0) && payload.packages?.length) {
     const lowest = Math.min(...payload.packages.map((pkg) => Number(pkg.price) || 0))
     payload.price = Number.isFinite(lowest) ? lowest : 0
@@ -152,6 +171,11 @@ export const updateGig = asyncHandler(async (req, res) => {
   if (!isOwner) return res.status(403).json({ message: 'Not allowed to update this gig' })
 
   const payload = pickGigFields(req.body)
+  if (payload.media && !validateMediaLimits(payload.media)) {
+    return res.status(400).json({
+      message: `You can upload up to ${GIG_IMAGE_LIMIT} images and ${GIG_VIDEO_LIMIT} videos per gig.`,
+    })
+  }
   if ((payload.price === undefined || Number(payload.price) <= 0) && payload.packages?.length) {
     const lowest = Math.min(...payload.packages.map((pkg) => Number(pkg.price) || 0))
     payload.price = Number.isFinite(lowest) ? lowest : gig.price

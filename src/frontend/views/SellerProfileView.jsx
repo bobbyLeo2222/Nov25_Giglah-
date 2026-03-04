@@ -10,13 +10,11 @@ function SellerProfileView({
   formatter,
   timeAgo,
   user,
-  canViewAnalytics = false,
-  onOpenAnalytics,
   isOwner = false,
   savedGigs = [],
   savedSellers = [],
   buyerBriefs = [],
-  onBackToDashboard,
+  canLeaveReview = false,
   onSubmitReview,
   onReviewDraftChange,
   onOpenChatFromGig,
@@ -42,19 +40,23 @@ function SellerProfileView({
   const savedGigCount = savedGigs.length
   const savedSellerCount = savedSellers.length
   const responseTime = selectedSeller.stats?.response || '—'
-  const repeatClients = selectedSeller.stats?.repeat || '—'
   const specialties = Array.isArray(selectedSeller.specialties) ? selectedSeller.specialties : []
   const languages = Array.isArray(selectedSeller.languages) ? selectedSeller.languages : []
   const hasHeadline = Boolean(selectedSeller.headline)
   const hasLocation = Boolean(selectedSeller.location)
-  const hasAbout = Boolean(selectedSeller.about)
+  const aboutText = selectedSeller.about || selectedSeller.bio || selectedSeller.headline || ''
+  const hasAbout = Boolean(aboutText)
   const hasAvailability = Boolean(selectedSeller.availability)
   const hasSpecialties = specialties.length > 0
   const hasLanguages = languages.length > 0
   const hasWebsite = Boolean(selectedSeller.socials?.website)
   const hasInstagram = Boolean(selectedSeller.socials?.instagram)
+  const hasOtherSocial = Boolean(selectedSeller.socials?.otherSocial || selectedSeller.otherSocialUrl)
+  const hasSocialLinks = hasWebsite || hasInstagram || hasOtherSocial
   const showBioCard = Boolean(selectedSeller.avatar || hasAbout || hasLanguages || (isOwner && hasAvailability))
-  const showOwnerPanel = isOwner && (hasAvailability || hasWebsite || hasInstagram || sellerPortfolio.length > 0)
+  const isSellerMode = Boolean(user?.isSeller)
+  const showBuyerActions = !isOwner && !isSellerMode
+  const showReviewForm = showBuyerActions && canLeaveReview
   const initials = selectedSeller.name
     ? selectedSeller.name
         .split(' ')
@@ -80,32 +82,55 @@ function SellerProfileView({
       <div className="space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Seller profile</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Seller Profile</p>
             <h2 className="text-2xl font-semibold text-slate-900">{selectedSeller.name}</h2>
             {hasHeadline && <p className="text-sm text-slate-600">{selectedSeller.headline}</p>}
             {hasLocation && <p className="text-sm text-slate-500">{selectedSeller.location}</p>}
+            {hasSocialLinks && (
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {hasWebsite && (
+                  <a
+                    href={selectedSeller.socials.website}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-700 transition hover:bg-purple-50"
+                  >
+                    Website
+                  </a>
+                )}
+                {hasInstagram && (
+                  <a
+                    href={selectedSeller.socials.instagram}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-700 transition hover:bg-purple-50"
+                  >
+                    Instagram
+                  </a>
+                )}
+                {hasOtherSocial && (
+                  <a
+                    href={selectedSeller.socials?.otherSocial || selectedSeller.otherSocialUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-700 transition hover:bg-purple-50"
+                  >
+                    Other
+                  </a>
+                )}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2 sm:hidden">
-              <Button variant="outline" className="text-sm text-slate-600" onClick={onBackToDashboard}>
-                Back
-              </Button>
-              {canViewAnalytics && (
+              {!isSellerMode && (
                 <Button
-                  type="button"
                   variant="outline"
-                  className="text-sm border-purple-200 text-purple-700 hover:bg-purple-50"
-                  onClick={() => onOpenAnalytics?.()}
+                  className={`text-sm ${isSellerFavorited ? 'border-rose-200 text-rose-700' : 'text-slate-700'}`}
+                  onClick={() => onToggleFavoriteSeller?.()}
                 >
-                  Analytics
+                  {isSellerFavorited ? 'Saved seller' : 'Save seller'}
                 </Button>
               )}
-              <Button
-                variant="outline"
-                className={`text-sm ${isSellerFavorited ? 'border-rose-200 text-rose-700' : 'text-slate-700'}`}
-                onClick={() => onToggleFavoriteSeller?.()}
-              >
-                {isSellerFavorited ? 'Saved seller' : 'Save seller'}
-              </Button>
-              {!isOwner && (
+              {showBuyerActions && (
                 <Button
                   className="flex-1 bg-purple-600 text-white hover:bg-purple-500"
                   onClick={() =>
@@ -125,27 +150,16 @@ function SellerProfileView({
             </div>
           </div>
           <div className="hidden flex-wrap items-center gap-2 sm:flex">
-            <Button variant="outline" className="text-sm text-slate-600" onClick={onBackToDashboard}>
-              Back
-            </Button>
-            {canViewAnalytics && (
-              <Button
-                type="button"
-                variant="outline"
-                className="text-sm border-purple-200 text-purple-700 hover:bg-purple-50"
-                onClick={() => onOpenAnalytics?.()}
-              >
-                Analytics
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              className={`text-sm ${isSellerFavorited ? 'border-rose-200 text-rose-700' : 'text-slate-700'}`}
-              onClick={() => onToggleFavoriteSeller?.()}
-            >
-              {isSellerFavorited ? 'Saved seller' : 'Save seller'}
-            </Button>
-            {!isOwner && (
+              {!isSellerMode && (
+                <Button
+                  variant="outline"
+                  className={`text-sm ${isSellerFavorited ? 'border-rose-200 text-rose-700' : 'text-slate-700'}`}
+                  onClick={() => onToggleFavoriteSeller?.()}
+                >
+                  {isSellerFavorited ? 'Saved seller' : 'Save seller'}
+                </Button>
+              )}
+            {showBuyerActions && (
               <Button
                 type="button"
                 className="bg-purple-600 text-white hover:bg-purple-500"
@@ -166,8 +180,7 @@ function SellerProfileView({
           </div>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
-          <div className="space-y-4">
+        <div className="space-y-4">
             {showBioCard && (
               <div className="flex items-start gap-4 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
                 {selectedSeller.avatar ? (
@@ -182,7 +195,7 @@ function SellerProfileView({
                   </div>
                 )}
                 <div className="space-y-2">
-                  {hasAbout && <p className="text-sm text-slate-600">{selectedSeller.about}</p>}
+                  {hasAbout && <p className="text-sm text-slate-600">{aboutText}</p>}
                   {(hasLanguages || (isOwner && hasAvailability)) && (
                     <div className="flex flex-wrap gap-2 text-xs">
                       {isOwner && hasAvailability && (
@@ -278,47 +291,6 @@ function SellerProfileView({
                 )}
               </div>
             )}
-          </div>
-
-          {showOwnerPanel && (
-            <div className="rounded-3xl border border-slate-100 bg-gradient-to-br from-purple-100 via-slate-50 to-white p-5 shadow-inner">
-              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Availability</p>
-              {hasAvailability && (
-                <p className="mt-2 text-sm text-slate-700">{selectedSeller.availability}</p>
-              )}
-              {sellerPortfolio.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  {sellerPortfolio.slice(0, 3).map((gig) => (
-                    <span key={gig.id} className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700">
-                      {gig.title}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="mt-4 flex flex-wrap gap-2">
-                {hasWebsite && (
-                  <a
-                    href={selectedSeller.socials.website}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full border border-purple-200 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-white"
-                  >
-                    Website
-                  </a>
-                )}
-                {hasInstagram && (
-                  <a
-                    href={selectedSeller.socials.instagram}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full border border-purple-200 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-white"
-                  >
-                    Instagram
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm">
@@ -360,14 +332,16 @@ function SellerProfileView({
                     >
                       View gig
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                      onClick={() => onOpenChatFromGig(gig)}
-                    >
-                      Enquire
-                    </Button>
+                    {showBuyerActions && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                        onClick={() => onOpenChatFromGig(gig)}
+                      >
+                        Enquire
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -375,7 +349,7 @@ function SellerProfileView({
           </div>
         </div>
 
-        {isOwner && (
+        {isOwner && !isSellerMode && (
           <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
@@ -494,20 +468,14 @@ function SellerProfileView({
                   </div>
                 </div>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                onClick={onBackToDashboard}
-              >
-                Browse other sellers
-              </Button>
             </div>
 
             <div className="mt-4 space-y-3">
               {sellerReviewList.length === 0 && (
                 <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
-                  No reviews yet. Be the first buyer to share feedback for {selectedSeller.name}.
+                  {showReviewForm
+                    ? `No reviews yet. Be the first buyer to share feedback for ${selectedSeller.name}.`
+                    : `No reviews yet. Only buyers with a completed gig can review ${selectedSeller.name}.`}
                 </p>
               )}
               {sellerReviewList.map((review) => (
@@ -534,50 +502,61 @@ function SellerProfileView({
             </div>
           </div>
 
-          {!isOwner && (
-            <form className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm" onSubmit={onSubmitReview}>
-              <p className="text-sm font-semibold text-slate-900">Leave a review</p>
-              <p className="text-xs text-slate-500">Share a rating and note to help other buyers choose confidently.</p>
-              <div className="mt-3 space-y-3">
-                <div className="space-y-1 sm:space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Rating</label>
-                  <select
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                    value={reviewDraft.rating}
-                    onChange={onReviewDraftChange('rating')}
-                  >
-                    {[5, 4, 3, 2, 1].map((rating) => (
-                      <option key={rating} value={rating}>
-                        {rating} star{rating === 1 ? '' : 's'}
-                      </option>
-                    ))}
-                  </select>
+          {showBuyerActions && (
+            showReviewForm ? (
+              <form
+                className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm"
+                onSubmit={onSubmitReview}
+              >
+                <p className="text-sm font-semibold text-slate-900">Leave a review</p>
+                <p className="text-xs text-slate-500">Share a rating and note to help other buyers choose confidently.</p>
+                <div className="mt-3 space-y-3">
+                  <div className="space-y-1 sm:space-y-2">
+                    <label className="text-xs font-semibold text-slate-700">Rating</label>
+                    <select
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                      value={reviewDraft.rating}
+                      onChange={onReviewDraftChange('rating')}
+                    >
+                      {[5, 4, 3, 2, 1].map((rating) => (
+                        <option key={rating} value={rating}>
+                          {rating} star{rating === 1 ? '' : 's'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <label className="text-xs font-semibold text-slate-700">Project or gig</label>
+                    <input
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                      placeholder="e.g., AI chatbot rollout"
+                      value={reviewDraft.project}
+                      onChange={onReviewDraftChange('project')}
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <label className="text-xs font-semibold text-slate-700">Review</label>
+                    <textarea
+                      rows={4}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                      placeholder="What went well? How was the communication and delivery?"
+                      value={reviewDraft.text}
+                      onChange={onReviewDraftChange('text')}
+                    />
+                  </div>
+                  <Button type="submit" className="w-full bg-purple-600 text-white hover:bg-purple-500">
+                    Post review
+                  </Button>
                 </div>
-                <div className="space-y-1 sm:space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Project or gig</label>
-                  <input
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                    placeholder="e.g., AI chatbot rollout"
-                    value={reviewDraft.project}
-                    onChange={onReviewDraftChange('project')}
-                  />
-                </div>
-                <div className="space-y-1 sm:space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Review</label>
-                  <textarea
-                    rows={4}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                    placeholder="What went well? How was the communication and delivery?"
-                    value={reviewDraft.text}
-                    onChange={onReviewDraftChange('text')}
-                  />
-                </div>
-                <Button type="submit" className="w-full bg-purple-600 text-white hover:bg-purple-500">
-                  Post review
-                </Button>
-                {!user && <p className="text-xs font-semibold text-amber-600">Log in to post a review.</p>}
+              </form>
+            ) : (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm">
+                <p className="text-sm font-semibold text-slate-900">Leave a review</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Complete at least one gig with this seller before posting a review.
+                </p>
               </div>
-            </form>
+            )
           )}
         </div>
       </div>

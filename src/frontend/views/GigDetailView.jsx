@@ -56,10 +56,10 @@ function GigDetailView({
   }
 
   const userId = user?._id || user?.id
+  const canUseBuyerActions = !user?.isSeller
   const isOwner = Boolean(
-    user?.isSeller &&
-      ((gig.owner && userId && gig.owner === userId) ||
-        (userSellerId && gig.sellerId === userSellerId)),
+    (gig.owner && userId && gig.owner === userId) ||
+      (userSellerId && gig.sellerId === userSellerId),
   )
   const [previewImage, setPreviewImage] = useState('')
   const openPreview = (url) => {
@@ -88,22 +88,26 @@ function GigDetailView({
           <Button variant="outline" className="text-slate-700" onClick={onBackToDashboard}>
             Back
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`border ${isFavorited ? 'border-rose-200 text-rose-700' : 'border-slate-200 text-slate-700'} hover:bg-rose-50`}
-            onClick={() => onToggleFavorite?.()}
-          >
-            {isFavorited ? 'Saved' : 'Save'}
-          </Button>
-          <Button
-            type="button"
-            className="bg-purple-600 text-white hover:bg-purple-500"
-            onClick={() => onOpenChat?.(gig)}
-            disabled={isOwner}
-          >
-            {isOwner ? 'This is your gig' : 'Message seller'}
-          </Button>
+          {canUseBuyerActions && (
+            <Button
+              type="button"
+              variant="outline"
+              className={`border ${isFavorited ? 'border-rose-200 text-rose-700' : 'border-slate-200 text-slate-700'} hover:bg-rose-50`}
+              onClick={() => onToggleFavorite?.()}
+            >
+              {isFavorited ? 'Saved' : 'Save'}
+            </Button>
+          )}
+          {canUseBuyerActions && (
+            <Button
+              type="button"
+              className="bg-purple-600 text-white hover:bg-purple-500"
+              onClick={() => onOpenChat?.(gig)}
+              disabled={isOwner}
+            >
+              {isOwner ? 'This is your gig' : 'Message seller'}
+            </Button>
+          )}
         </div>
       </div>
 

@@ -106,29 +106,54 @@ const parseLanguages = (languages = []) =>
     return null
   }).filter(Boolean)
 
+const resolveId = (value) => {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'object') {
+    const objectId = value._id?.toString?.()
+    if (objectId) return objectId
+    const id = value.id?.toString?.()
+    if (id) return id
+  }
+  return ''
+}
+
 const normalizeProfile = (profile) => {
   const displayName = profile.displayName || profile.user?.name || ''
   const availability =
     profile.availability && profile.availability !== 'Available' ? profile.availability : ''
   const skills = Array.isArray(profile.skills) ? profile.skills : []
+  const avatar =
+    profile.imageUrl ||
+    profile.avatarUrl ||
+    profile.avatar ||
+    profile.user?.avatarUrl ||
+    ''
+  const userId = resolveId(profile.user) || resolveId(profile.userId)
   return {
-    id: profile.sellerId || profile._id,
-    userId: profile.user?._id || '',
+    id: profile.sellerId || profile._id || profile.id || '',
+    userId,
     displayName,
     name: displayName,
     headline: profile.headline || '',
     bio: profile.bio || profile.about || '',
     about: profile.bio || profile.about || '',
     location: profile.location || '',
-    avatar: profile.imageUrl || profile.user?.avatarUrl || '',
-    heroImage: profile.imageUrl || '',
+    avatar,
+    heroImage: avatar,
     specialties: skills,
     skills,
     languages: parseLanguages(profile.languages),
     stats: profile.stats || { projects: 0, response: '—', repeat: '—' },
-    socials: { website: profile.websiteUrl || '', instagram: profile.instagramUrl || '' },
+    socials: {
+      website: profile.websiteUrl || '',
+      instagram: profile.instagramUrl || '',
+      otherSocial: profile.otherSocialUrl || '',
+    },
     websiteUrl: profile.websiteUrl || '',
     instagramUrl: profile.instagramUrl || '',
+    otherSocialUrl: profile.otherSocialUrl || '',
+    phone: profile.phone || '',
     availability,
     languagesRaw: profile.languages || [],
   }

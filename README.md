@@ -26,4 +26,8 @@ Minimum environment variables to set in DigitalOcean:
 - `JWT_SECRET`
 - `CLIENT_ORIGIN` (e.g. `https://your-app.ondigitalocean.app`)
 
+Frontend API config:
+- Do **not** set `VITE_API_BASE` to `http://localhost:5001` in production (that points to the end-user’s computer).
+- If you host API + frontend on the same DigitalOcean app, leave `VITE_API_BASE` unset so the frontend uses the current site origin.
+
 If you use the email / Cloudinary / Google features, also set the corresponding variables from `server/.env` in DigitalOcean (do not commit secrets).

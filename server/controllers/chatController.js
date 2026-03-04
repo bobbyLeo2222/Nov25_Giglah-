@@ -84,8 +84,9 @@ const resolveSellerUserId = async ({ sellerId, gigId }) => {
 }
 
 const resolveChatContext = async (req) => {
-  const buyerId = req.user.id
+  const requesterId = req.user.id
   const sellerIdInput = req.body?.sellerId
+  const buyerIdInput = req.body?.buyerId
   const gigId = req.body?.gigId
   let gigTitle = req.body?.gigTitle
   let sellerName = req.body?.sellerName
@@ -99,6 +100,16 @@ const resolveChatContext = async (req) => {
   const sellerId =
     (gigDoc?.seller && gigDoc.seller.toString()) ||
     (await resolveSellerUserId({ sellerId: sellerIdInput, gigId }))
+
+  const normalizedBuyerId =
+    typeof buyerIdInput === 'string' && isObjectId(buyerIdInput) ? buyerIdInput : ''
+  const buyerId =
+    sellerId &&
+    sellerId.toString() === requesterId.toString() &&
+    normalizedBuyerId &&
+    normalizedBuyerId !== sellerId.toString()
+      ? normalizedBuyerId
+      : requesterId
 
   return {
     buyerId,

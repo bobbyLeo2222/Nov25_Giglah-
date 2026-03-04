@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs'
 import User from '../models/User.js'
 import RefreshToken from '../models/RefreshToken.js'
 import { sendMail } from '../utils/mailer.js'
-import { generateRandomToken, hashToken, signAccessToken } from '../utils/tokens.js'
+import { generateNumericCode, generateRandomToken, hashToken, signAccessToken } from '../utils/tokens.js'
 
 const sanitizeUser = (user) => {
   const obj = user.toObject ? user.toObject() : user
@@ -16,6 +16,9 @@ const sanitizeUser = (user) => {
 
 const REFRESH_TTL_DAYS = 30
 const buildAppBaseUrl = () => process.env.CLIENT_ORIGIN || 'http://localhost:5173'
+const PASSWORD_REQUIREMENTS_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/
+const PASSWORD_REQUIREMENTS_MESSAGE =
+  'Use at least 8 characters with uppercase, lowercase, and a number.'
 
 const issueTokens = async (user, context = {}) => {
   const accessToken = signAccessToken(user)
@@ -40,6 +43,9 @@ export const register = async (req, res) => {
   if (!nameValue || !emailValue || !passwordValue) {
     return res.status(400).json({ message: 'Name, email, and password are required' })
   }
+  if (!PASSWORD_REQUIREMENTS_REGEX.test(passwordValue)) {
+    return res.status(400).json({ message: PASSWORD_REQUIREMENTS_MESSAGE })
+  }
 
   const existing = await User.findOne({ email: emailValue })
   if (existing) {
@@ -47,7 +53,7 @@ export const register = async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(passwordValue, 10)
-  const verificationToken = generateRandomToken()
+  const verificationToken = generateNumericCode(6)
   const user = await User.create({
     name: nameValue,
     email: emailValue,
@@ -59,14 +65,11 @@ export const register = async (req, res) => {
   })
 
   if (process.env.SMTP_HOST) {
-    const verifyLink = `${buildAppBaseUrl()}/verify-email?token=${verificationToken}&email=${encodeURIComponent(
-      user.email,
-    )}`
     await sendMail({
       to: user.email,
       subject: 'Verify your email for GigLah!',
-      text: `Welcome to GigLah! Click to verify your email: ${verifyLink}`,
-      html: `<p>Welcome to GigLah!</p><p><a href="${verifyLink}">Verify your email</a></p>`,
+      text: `Welcome to GigLah! Your verification code is ${verificationToken}. It expires in 24 hours.`,
+      html: `<p>Welcome to GigLah!</p><p>Your verification code:</p><p><strong>${verificationToken}</strong></p><p>This code expires in 24 hours.</p>`,
     })
   }
 
@@ -158,6 +161,9 @@ export const resetPassword = async (req, res) => {
   if (!email || !token || !password) {
     return res.status(400).json({ message: 'Email, token, and new password are required' })
   }
+  if (!PASSWORD_REQUIREMENTS_REGEX.test(password)) {
+    return res.status(400).json({ message: PASSWORD_REQUIREMENTS_MESSAGE })
+  }
   const user = await User.findOne({ email: email.toLowerCase() })
   if (!user || !user.resetTokenHash || !user.resetTokenExpiresAt) {
     return res.status(400).json({ message: 'Invalid reset token' })
@@ -194,7 +200,13 @@ export const verifyEmail = async (req, res) => {
   user.verificationTokenHash = undefined
   user.verificationTokenExpiresAt = undefined
   await user.save()
-  return res.json({ message: 'Email verified', user: sanitizeUser(user) })
+  const tokens = await issueTokens(user, { userAgent: req.get('user-agent'), ip: req.ip })
+  return res.json({
+    message: 'Email verified',
+    user: sanitizeUser(user),
+    token: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+  })
 }
 
 export const resendVerification = async (req, res) => {
@@ -203,19 +215,16 @@ export const resendVerification = async (req, res) => {
   const user = await User.findOne({ email: email.toLowerCase() })
   if (!user) return res.json({ message: 'If that account exists, a verification email has been sent.' })
   if (user.emailVerified) return res.json({ message: 'Email already verified.' })
-  const verificationToken = generateRandomToken()
+  const verificationToken = generateNumericCode(6)
   user.verificationTokenHash = hashToken(verificationToken)
   user.verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
   await user.save()
   if (process.env.SMTP_HOST) {
-    const verifyLink = `${buildAppBaseUrl()}/verify-email?token=${verificationToken}&email=${encodeURIComponent(
-      user.email,
-    )}`
     await sendMail({
       to: user.email,
       subject: 'Verify your email for GigLah!',
-      text: `Verify your email: ${verifyLink}`,
-      html: `<p><a href="${verifyLink}">Verify your email</a></p>`,
+      text: `Your GigLah! verification code is ${verificationToken}. It expires in 24 hours.`,
+      html: `<p>Your GigLah! verification code:</p><p><strong>${verificationToken}</strong></p><p>This code expires in 24 hours.</p>`,
     })
   }
   return res.json({ message: 'If that account exists, a verification email has been sent.' })

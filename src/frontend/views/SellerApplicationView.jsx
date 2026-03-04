@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { southeastAsiaCountries } from '@/data/static'
 
 function SellerApplicationView({
   user,
@@ -18,6 +19,7 @@ function SellerApplicationView({
   onSubmit,
 }) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const isSellerMode = Boolean(user?.isSeller)
   const profilePreviewUrl = useMemo(() => {
     if (!sellerForm.profilePicture) return ''
     return URL.createObjectURL(sellerForm.profilePicture)
@@ -34,10 +36,16 @@ function SellerApplicationView({
     <section className="w-full rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Become a seller</p>
-          <h2 className="text-2xl font-semibold text-slate-900">Complete your profile</h2>
+          <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
+            {isSellerMode ? 'Seller profile' : 'Become a seller'}
+          </p>
+          <h2 className="text-2xl font-semibold text-slate-900">
+            {isSellerMode ? 'Update your profile' : 'Complete your profile'}
+          </h2>
           <p className="text-sm text-slate-500">
-            We review this info before unlocking seller tools for your account.
+            {isSellerMode
+              ? 'Keep your seller details up to date so buyers can find you.'
+              : 'We review this info before unlocking seller tools for your account.'}
           </p>
         </div>
         <Button
@@ -197,6 +205,30 @@ function SellerApplicationView({
             value={sellerForm.phone}
             onChange={onSellerFormChange('phone')}
           />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">Country</label>
+          <select
+            className={sellerInputClasses}
+            value={sellerForm.country}
+            onChange={onSellerFormChange('country')}
+          >
+            <option value="">Select country</option>
+            {southeastAsiaCountries.map((country) => (
+              <option key={country} value={country}>
+                {country}
+              </option>
+            ))}
+            <option value="Others">Others</option>
+          </select>
+          {sellerForm.country === 'Others' && (
+            <input
+              className={sellerInputClasses}
+              placeholder="Enter country"
+              value={sellerForm.otherCountry}
+              onChange={onSellerFormChange('otherCountry')}
+            />
+          )}
         </div>
         <div className="space-y-3">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">

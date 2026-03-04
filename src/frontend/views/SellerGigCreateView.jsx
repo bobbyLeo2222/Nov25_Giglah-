@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button'
 function SellerGigCreateView({
   user,
   userGigCount,
-  userSellerId,
   inputClasses,
   categoryOptions = [],
   newGig,
@@ -12,7 +11,6 @@ function SellerGigCreateView({
   isUploadingMedia,
   myGigs,
   formatter,
-  onOpenSellerProfile,
   onOpenLogin,
   onOpenSignup,
   onStartApplication,
@@ -25,7 +23,7 @@ function SellerGigCreateView({
   onCreateGig,
 }) {
   return (
-    <section className="w-full rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
+    <section id="create-gig" className="w-full rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-50 text-purple-600">
           <svg
@@ -40,10 +38,9 @@ function SellerGigCreateView({
           </svg>
         </div>
         <div className="flex-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Seller hub</p>
-          <h2 className="text-2xl font-semibold text-slate-900">List your gig for Singapore buyers</h2>
+          <h2 className="text-2xl font-semibold text-slate-900">Create a Gig</h2>
           <p className="text-sm text-slate-500">
-            Use the same login. Complete a quick profile, then submit your listing.
+            Use the same login. Complete your profile, then publish your listing.
           </p>
         </div>
         {user?.isSeller && (
@@ -51,14 +48,6 @@ function SellerGigCreateView({
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               {userGigCount || 0} live gig{userGigCount === 1 ? '' : 's'}
             </span>
-            <Button
-              type="button"
-              variant="outline"
-              className="border-purple-200 text-purple-700 hover:bg-purple-50"
-              onClick={() => onOpenSellerProfile(userSellerId, user.name)}
-            >
-              Preview profile
-            </Button>
           </div>
         )}
       </div>
@@ -214,7 +203,7 @@ function SellerGigCreateView({
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Photos & videos</p>
                   <p className="text-xs text-slate-500">
-                    Upload images or short clips (jpg, png, webp, mp4, mov). Up to 10 files.
+                    Upload images or short clips (jpg, png, webp, mp4, mov). Up to 10 images and 3 videos.
                   </p>
                 </div>
                 <label className="inline-flex items-center justify-center rounded-full bg-purple-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-purple-500">

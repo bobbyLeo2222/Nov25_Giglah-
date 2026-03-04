@@ -12,8 +12,6 @@ function SellerAnalyticsView({
   slaHours = 24,
   onBackToDashboard,
   onOpenProfile,
-  onOpenPublicProfile,
-  onRefresh,
 }) {
   if (!user) {
     return (
@@ -31,32 +29,43 @@ function SellerAnalyticsView({
     )
   }
 
+  if (!user.isSeller && user.role !== 'admin') {
+    return (
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="space-y-3">
+          <p className="text-lg font-semibold text-slate-900">Seller mode is off</p>
+          <p className="text-sm text-slate-600">
+            Switch to seller mode from the top bar to view seller analytics.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="border-purple-200 text-purple-700 hover:bg-purple-50"
+              onClick={onOpenProfile}
+            >
+              Open profile
+            </Button>
+            <Button type="button" className="bg-purple-600 text-white hover:bg-purple-500" onClick={onBackToDashboard}>
+              Back to Marketplace
+            </Button>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   const totals = analytics?.totals || {}
   const response = analytics?.response || {}
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Seller analytics</p>
-          <h2 className="text-3xl font-semibold text-slate-900">Performance dashboard</h2>
           <p className="text-sm text-slate-600">
-            Tracking the last {rangeDays} days. SLA window: {slaHours}h.
+            Tracking the last {rangeDays} days.
           </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" className="px-5 text-slate-700" onClick={onBackToDashboard}>
-            Marketplace
-          </Button>
-          <Button variant="outline" className="px-5 text-slate-700" onClick={onOpenProfile}>
-            Private profile
-          </Button>
-          <Button variant="outline" className="px-5 text-slate-700" onClick={onOpenPublicProfile}>
-            Public profile
-          </Button>
-          <Button type="button" className="px-5 bg-purple-600 text-white hover:bg-purple-500" onClick={onRefresh}>
-            Refresh
-          </Button>
         </div>
       </div>
 
@@ -148,7 +157,7 @@ function SellerAnalyticsView({
             </div>
           </div>
           <div className="mt-4 rounded-2xl border border-slate-100 bg-white px-4 py-4 text-sm text-slate-600">
-            Keep replies consistent to improve your SLA compliance and close rate.
+            Keep replies consistent to improve your SLA (Service Level Agreement) compliance and close rate.
           </div>
         </div>
       </div>

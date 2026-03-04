@@ -4,6 +4,10 @@ import jwt from 'jsonwebtoken'
 const TOKEN_BYTES = 32
 
 export const generateRandomToken = () => crypto.randomBytes(TOKEN_BYTES).toString('hex')
+export const generateNumericCode = (length = 6) => {
+  const max = 10 ** length
+  return crypto.randomInt(0, max).toString().padStart(length, '0')
+}
 export const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex')
 
 export const signAccessToken = (user, ttl = '15m') =>

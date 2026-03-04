@@ -38,6 +38,20 @@ export const languageOptions = [
   'Thai',
 ]
 
+export const southeastAsiaCountries = [
+  'Brunei',
+  'Cambodia',
+  'Indonesia',
+  'Laos',
+  'Malaysia',
+  'Myanmar',
+  'Philippines',
+  'Singapore',
+  'Thailand',
+  'Timor-Leste',
+  'Vietnam',
+]
+
 export const competencyLevels = ['Conversational', 'Professional', 'Advanced', 'Native']
 
 export const initialSellerForm = {
@@ -45,6 +59,8 @@ export const initialSellerForm = {
   displayName: '',
   profilePicture: null,
   description: '',
+  country: '',
+  otherCountry: '',
   website: '',
   instagram: '',
   otherSocial: '',

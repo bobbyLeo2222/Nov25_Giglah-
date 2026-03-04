@@ -27,7 +27,7 @@ const clientDistDir = path.resolve(__dirname, '..', 'dist')
 
 const allowedOrigins = process.env.CLIENT_ORIGIN
   ? process.env.CLIENT_ORIGIN.split(',').map((origin) => origin.trim())
-  : ['http://localhost:5173', 'http://localhost:3000']
+  : ['http://localhost:5175', 'http://localhost:3000']
 
 app.use(cors({ origin: allowedOrigins, credentials: true }))
 app.use(express.json({ limit: '10mb' }))

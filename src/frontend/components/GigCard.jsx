@@ -11,6 +11,7 @@ function GigCard({
   isFavorited = false,
   onToggleFavorite,
   onPreviewImage,
+  showBuyerActions = true,
 }) {
   const primaryImage =
     gig.imageUrl || gig.media?.find((item) => item.type === 'image')?.url || ''
@@ -18,6 +19,8 @@ function GigCard({
     !primaryImage && gig.media ? gig.media.find((item) => item.type === 'video') : null
   const hasPackages = Array.isArray(gig.packages) && gig.packages.length > 0
   const isPreviewable = Boolean(onPreviewImage && primaryImage)
+  const canSaveGig = showBuyerActions && typeof onToggleFavorite === 'function'
+  const canChatSeller = showBuyerActions && typeof onOpenChat === 'function'
   const handlePreviewKey = (event) => {
     if (!isPreviewable) return
     if (event.key === 'Enter' || event.key === ' ') {
@@ -61,17 +64,19 @@ function GigCard({
         <span className="absolute bottom-3 left-3 rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-slate-700 backdrop-blur">
           {gig.category || 'General'}
         </span>
-        <button
-          type="button"
-          className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-rose-600 shadow-sm transition hover:bg-white"
-          onClick={(event) => {
-            event.stopPropagation()
-            onToggleFavorite?.()
-          }}
-          aria-label={isFavorited ? 'Unsave gig' : 'Save gig'}
-        >
-          {isFavorited ? 'Saved' : 'Save'}
-        </button>
+        {canSaveGig && (
+          <button
+            type="button"
+            className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-rose-600 shadow-sm transition hover:bg-white"
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggleFavorite?.()
+            }}
+            aria-label={isFavorited ? 'Unsave gig' : 'Save gig'}
+          >
+            {isFavorited ? 'Saved' : 'Save'}
+          </button>
+        )}
       </div>
       <div className="flex flex-1 flex-col gap-3 px-4 py-4">
         <div>
@@ -129,14 +134,16 @@ function GigCard({
                 <InstagramIcon className="h-4 w-4" />
               </a>
             )}
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-900 transition hover:border-purple-200 hover:text-purple-600"
-              onClick={() => onOpenChat?.(gig)}
-              aria-label={`Chat with ${gig.seller}`}
-            >
-              <ChatBubbleIcon className="h-4 w-4" />
-            </button>
+            {canChatSeller && (
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-900 transition hover:border-purple-200 hover:text-purple-600"
+                onClick={() => onOpenChat?.(gig)}
+                aria-label={`Chat with ${gig.seller}`}
+              >
+                <ChatBubbleIcon className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>

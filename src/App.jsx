@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import TopBar from '@/components/ui/TopBar'
@@ -15,13 +15,15 @@ import SignupModal from '@/frontend/auth/SignupModal'
 import GigCard from '@/frontend/components/GigCard'
 import RatingStars from '@/frontend/components/RatingStars'
 import DashboardView from '@/frontend/views/DashboardView'
+import SearchResultsView from '@/frontend/views/SearchResultsView'
 import ChatView from '@/frontend/views/ChatView'
 import SellerApplicationView from '@/frontend/views/SellerApplicationView'
 import SellerProfileView from '@/frontend/views/SellerProfileView'
 import UserProfileView from '@/frontend/views/UserProfileView'
 import GigDetailView from '@/frontend/views/GigDetailView'
-import SellerAnalyticsView from '@/frontend/views/SellerAnalyticsView'
 import SellerDashboardView from '@/frontend/views/SellerDashboardView'
+import SellerOrdersView from '@/frontend/views/SellerOrdersView'
+import { normalizeOrderStatus } from '@/frontend/orderUtils'
 import {
   buildSellerId,
   formatFileSize,
@@ -41,6 +43,30 @@ import {
   setStoredRefreshToken,
   setStoredToken,
 } from '@/lib/api'
+
+const PASSWORD_REQUIREMENTS_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/
+const PASSWORD_REQUIREMENTS_MESSAGE =
+  'Use at least 8 characters with uppercase, lowercase, and a number.'
+const GIG_IMAGE_LIMIT = 10
+const GIG_VIDEO_LIMIT = 3
+const CHAT_POLL_INTERVAL_MS = 15000
+const ORDER_POLL_INTERVAL_MS = 20000
+const NOTIFICATION_TOAST_DURATION_MS = 6500
+const MAX_NOTIFICATIONS = 30
+
+const getComparableUserId = (participant) =>
+  participant?._id?.toString?.() || participant?.id?.toString?.() || participant?.toString?.() || ''
+
+const toOrderStatusLabel = (status = '') => {
+  const normalized = String(status || 'pending').replace(/_/g, ' ').trim()
+  if (!normalized) return 'Pending'
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+}
+
+const getOrderIdentity = (order) => String(order?._id || order?.id || '')
+
+const getOrderTimestamp = (order) =>
+  new Date(order?.updatedAt || order?.createdAt || 0).getTime() || 0
 
 function App() {
   const navigate = useNavigate()
@@ -91,11 +117,12 @@ function App() {
   const [reviewDraft, setReviewDraft] = useState({ rating: 5, text: '', project: '' })
   const [currentServiceSlide, setCurrentServiceSlide] = useState(0)
   const [chatThreads, setChatThreads] = useState([])
-  const [, setUnreadTotal] = useState(0)
+  const [unreadTotal, setUnreadTotal] = useState(0)
   const [selectedThreadId, setSelectedThreadId] = useState('')
   const [composerText, setComposerText] = useState('')
   const [composerFiles, setComposerFiles] = useState([])
   const [chatSearch, setChatSearch] = useState('')
+  const [chatRoleFilter, setChatRoleFilter] = useState('all')
   const [activeCategory, setActiveCategory] = useState('')
   const [isLoadingData, setIsLoadingData] = useState(false)
   const [showLoadingBanner, setShowLoadingBanner] = useState(false)
@@ -125,14 +152,57 @@ function App() {
   const [buyerBriefs, setBuyerBriefs] = useState([])
   const [buyerOrders, setBuyerOrders] = useState([])
   const [sellerOrders, setSellerOrders] = useState([])
-  const [sellerAnalytics, setSellerAnalytics] = useState(null)
-  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false)
-  const [analyticsError, setAnalyticsError] = useState('')
-  const [analyticsRangeDays, setAnalyticsRangeDays] = useState(30)
-  const [analyticsSlaHours, setAnalyticsSlaHours] = useState(24)
-  const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0)
+  const [notifications, setNotifications] = useState([])
+  const [notificationToasts, setNotificationToasts] = useState([])
   const [hasSyncedSellerProfile, setHasSyncedSellerProfile] = useState(false)
-  const authedFetch = (path, options = {}) => fetchJSON(path, { ...options, token: authToken })
+  const seenThreadActivityRef = useRef(new Map())
+  const seenOrderActivityRef = useRef(new Map())
+  const recentOrderMutationsRef = useRef(new Map())
+  const toastTimeoutsRef = useRef([])
+  const verificationEmailKey = 'giglah_pending_verification_email'
+  const authedFetch = async (path, options = {}) => {
+    const request = (token) => fetchJSON(path, { ...options, token })
+    try {
+      return await request(authToken)
+    } catch (error) {
+      const message = String(error?.message || '')
+      const isAuthError = /invalid or expired token|authentication required/i.test(message)
+      if (!isAuthError) {
+        throw error
+      }
+      if (!getStoredRefreshToken()) {
+        setAuthToken('')
+        setStoredToken('')
+        setStoredRefreshToken('')
+        setUser(null)
+        throw new Error('Session expired. Please log in again.')
+      }
+      try {
+        const refreshedToken = await refreshAccessToken()
+        setAuthToken(refreshedToken)
+        setStoredToken(refreshedToken)
+        return await request(refreshedToken)
+      } catch {
+        setAuthToken('')
+        setStoredToken('')
+        setStoredRefreshToken('')
+        setUser(null)
+        throw new Error('Session expired. Please log in again.')
+      }
+    }
+  }
+  const getStoredVerificationEmail = () => {
+    if (typeof localStorage === 'undefined') return ''
+    return localStorage.getItem(verificationEmailKey) || ''
+  }
+  const setStoredVerificationEmail = (email) => {
+    if (typeof localStorage === 'undefined') return
+    if (email) {
+      localStorage.setItem(verificationEmailKey, email)
+    } else {
+      localStorage.removeItem(verificationEmailKey)
+    }
+  }
   const persistAuth = (token, apiUser, refreshToken) => {
     setAuthToken(token || '')
     setStoredToken(token || '')
@@ -146,7 +216,86 @@ function App() {
     setStoredToken('')
     setStoredRefreshToken('')
     setUser(null)
+    setNotifications([])
+    setNotificationToasts([])
+    seenThreadActivityRef.current = new Map()
+    seenOrderActivityRef.current = new Map()
+    recentOrderMutationsRef.current = new Map()
   }
+
+  useEffect(
+    () => () => {
+      toastTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId))
+      toastTimeoutsRef.current = []
+    },
+    [],
+  )
+
+  const queueNotification = useCallback((payload) => {
+    if (!payload?.title) return
+    const now = Date.now()
+    const notificationId = `notif-${now}-${Math.random().toString(16).slice(2)}`
+    const dedupeKey = payload.dedupeKey || ''
+    const nextNotification = {
+      id: notificationId,
+      type: payload.type === 'order' ? 'order' : 'message',
+      title: payload.title,
+      body: payload.body || '',
+      createdAt: now,
+      unread: true,
+      action: payload.action || null,
+      dedupeKey,
+    }
+
+    setNotifications((prev) => {
+      if (dedupeKey && prev.some((entry) => entry.dedupeKey === dedupeKey)) return prev
+      return [nextNotification, ...prev].slice(0, MAX_NOTIFICATIONS)
+    })
+    setNotificationToasts((prev) => [nextNotification, ...prev].slice(0, 3))
+
+    if (typeof window !== 'undefined') {
+      const timeoutId = window.setTimeout(() => {
+        setNotificationToasts((prev) => prev.filter((entry) => entry.id !== notificationId))
+      }, NOTIFICATION_TOAST_DURATION_MS)
+      toastTimeoutsRef.current.push(timeoutId)
+    }
+
+    if (
+      typeof window !== 'undefined' &&
+      typeof document !== 'undefined' &&
+      document.visibilityState === 'hidden' &&
+      'Notification' in window &&
+      window.Notification.permission === 'granted'
+    ) {
+      try {
+        new window.Notification(payload.title, { body: payload.body || 'Open GigLah to view updates.' })
+      } catch {
+        // Browser notification support can fail silently in some environments.
+      }
+    }
+  }, [])
+
+  const dismissNotificationToast = useCallback((notificationId) => {
+    setNotificationToasts((prev) => prev.filter((entry) => entry.id !== notificationId))
+  }, [])
+
+  const markNotificationRead = useCallback((notificationId) => {
+    if (!notificationId) return
+    setNotifications((prev) =>
+      prev.map((entry) => (entry.id === notificationId ? { ...entry, unread: false } : entry)),
+    )
+  }, [])
+
+  const markAllNotificationsRead = useCallback(() => {
+    setNotifications((prev) => prev.map((entry) => ({ ...entry, unread: false })))
+  }, [])
+
+  const markNotificationsByTypeRead = useCallback((type) => {
+    if (!type) return
+    setNotifications((prev) =>
+      prev.map((entry) => (entry.type === type ? { ...entry, unread: false } : entry)),
+    )
+  }, [])
 
   const handleSwitchUserMode = (nextMode) => {
     if (!user || user.role !== 'seller') return
@@ -169,9 +318,38 @@ function App() {
     [user],
   )
 
-  const selectedSeller = useMemo(
-    () => sellerProfiles.find((profile) => profile.id === selectedSellerId) ?? null,
-    [sellerProfiles, selectedSellerId],
+  const mySellerProfile = useMemo(() => {
+    if (!user) return null
+    const userId = user._id || user.id || ''
+    if (userId) {
+      const byUserId = sellerProfiles.find((profile) => profile.userId && profile.userId === userId)
+      if (byUserId) return byUserId
+    }
+    return sellerProfiles.find((profile) => profile.id === userSellerId) || null
+  }, [sellerProfiles, user, userSellerId])
+
+  const mySellerProfileId = mySellerProfile?.id || userSellerId
+
+  const selectedSeller = useMemo(() => {
+    const byId = sellerProfiles.find((profile) => profile.id === selectedSellerId)
+    if (byId) return byId
+    if (!user) return null
+    const userId = user._id || user.id || ''
+    if (!userId || selectedSellerId !== userSellerId) return null
+    return sellerProfiles.find((profile) => profile.userId && profile.userId === userId) || null
+  }, [sellerProfiles, selectedSellerId, user, userSellerId])
+
+  const activeSellerId = selectedSeller?.id || selectedSellerId
+
+  const sellerNameById = useMemo(
+    () =>
+      sellerProfiles.reduce((map, profile) => {
+        if (profile?.id) {
+          map[profile.id] = profile.name || 'Seller'
+        }
+        return map
+      }, {}),
+    [sellerProfiles],
   )
 
   const selectedGig = useMemo(
@@ -180,21 +358,43 @@ function App() {
   )
 
   const sellerPortfolio = useMemo(
-    () => gigs.filter((gig) => gig.sellerId === selectedSellerId),
-    [gigs, selectedSellerId],
+    () => gigs.filter((gig) => gig.sellerId === activeSellerId),
+    [activeSellerId, gigs],
   )
 
   const selectedSellerIsOwner = useMemo(() => {
-    if (!user || !selectedSeller) return false
+    if (!user || !selectedSeller || !user.isSeller) return false
     const userId = user._id || user.id
     if (selectedSeller.userId && selectedSeller.userId === userId) return true
-    return Boolean(user.isSeller && selectedSellerId && selectedSellerId === userSellerId)
-  }, [selectedSeller, selectedSellerId, user, userSellerId])
+    return Boolean(selectedSeller.id && selectedSeller.id === mySellerProfileId)
+  }, [mySellerProfileId, selectedSeller, user])
 
   const sellerReviewList = useMemo(
-    () => sellerReviews[selectedSellerId] || [],
-    [sellerReviews, selectedSellerId],
+    () => sellerReviews[activeSellerId] || [],
+    [activeSellerId, sellerReviews],
   )
+
+  const canLeaveReviewForSelectedSeller = useMemo(() => {
+    if (!user || !authToken || user.isSeller || !activeSellerId || selectedSellerIsOwner) return false
+
+    const selectedSellerUserId = selectedSeller?.userId || ''
+    return buyerOrders.some((order) => {
+      const status = normalizeOrderStatus(order?.status)
+      if (status !== 'complete') return false
+
+      const orderSellerProfileId =
+        order?.sellerId || order?.seller?.sellerId || order?.sellerProfile?.sellerId || ''
+      if (orderSellerProfileId && String(orderSellerProfileId) === String(activeSellerId)) return true
+
+      const orderSellerUserId =
+        getComparableUserId(order?.seller) || order?.sellerUserId?.toString?.() || ''
+      return Boolean(
+        selectedSellerUserId &&
+          orderSellerUserId &&
+          String(orderSellerUserId) === String(selectedSellerUserId),
+      )
+    })
+  }, [activeSellerId, authToken, buyerOrders, selectedSeller?.userId, selectedSellerIsOwner, user])
 
   const relatedGigs = useMemo(() => {
     if (!selectedGig) return []
@@ -225,6 +425,41 @@ function App() {
     [chatThreads],
   )
 
+  useEffect(() => {
+    if (!user) {
+      setChatRoleFilter('all')
+      return
+    }
+    if (user.role !== 'seller') {
+      setChatRoleFilter('all')
+      return
+    }
+    setChatRoleFilter(user.isSeller ? 'seller' : 'buyer')
+  }, [user?._id, user?.id, user?.isSeller, user?.role])
+
+  const chatThreadCounts = useMemo(() => {
+    const userId = user?._id || user?.id || ''
+    return sortedThreads.reduce(
+      (counts, thread) => {
+        counts.all += 1
+        if (!userId || thread.buyerUserId === userId) counts.buyer += 1
+        if (!userId || thread.sellerUserId === userId) counts.seller += 1
+        return counts
+      },
+      { all: 0, buyer: 0, seller: 0 },
+    )
+  }, [sortedThreads, user])
+
+  const notificationUnreadCount = useMemo(
+    () => notifications.filter((entry) => entry.unread).length,
+    [notifications],
+  )
+
+  const orderNotificationCount = useMemo(
+    () => notifications.filter((entry) => entry.unread && entry.type === 'order').length,
+    [notifications],
+  )
+
   const totalGigPages = useMemo(() => {
     const size = Number(gigFilters.pageSize) || 1
     return Math.max(1, Math.ceil((totalGigs || 0) / size))
@@ -238,23 +473,41 @@ function App() {
       return (
         owner === user.email ||
         owner === userId ||
+        (gig.sellerId && mySellerProfileId && gig.sellerId === mySellerProfileId) ||
         gig.sellerId === userSellerId ||
         gig.seller === userId
       )
     },
-    [user, userSellerId],
+    [mySellerProfileId, user, userSellerId],
   )
 
   const visibleThreads = useMemo(() => {
+    const effectiveRoleFilter = user?.role === 'seller' ? chatRoleFilter : 'all'
+    const userId = user?._id || user?.id || ''
+    const roleFiltered =
+      effectiveRoleFilter === 'all'
+        ? sortedThreads
+        : sortedThreads.filter((thread) =>
+            effectiveRoleFilter === 'seller'
+              ? (!userId || thread.sellerUserId === userId)
+              : (!userId || thread.buyerUserId === userId),
+          )
     const searchTerm = chatSearch.trim().toLowerCase()
-    if (!searchTerm) return sortedThreads
-    return sortedThreads.filter(
+    if (!searchTerm) return roleFiltered
+    return roleFiltered.filter(
       (thread) =>
         thread.gigTitle.toLowerCase().includes(searchTerm) ||
         thread.sellerName.toLowerCase().includes(searchTerm) ||
         (thread.buyerName || '').toLowerCase().includes(searchTerm),
     )
-  }, [chatSearch, sortedThreads])
+  }, [chatRoleFilter, chatSearch, sortedThreads, user])
+
+  useEffect(() => {
+    if (!selectedThreadId) return
+    const stillVisible = visibleThreads.some((thread) => thread.id === selectedThreadId)
+    if (stillVisible) return
+    setSelectedThreadId(visibleThreads[0]?.id || '')
+  }, [selectedThreadId, visibleThreads])
 
   const myGigs = useMemo(
     () => (user ? gigs.filter((gig) => isGigOwner(gig)) : []),
@@ -265,23 +518,27 @@ function App() {
 
   const myProfile = useMemo(() => {
     if (!user) return null
-    const sellerProfile = sellerProfiles.find((profile) => profile.id === userSellerId) || null
+    const sellerProfile = mySellerProfile
+    const isSellerPrivateRoute = location.pathname === '/me/seller'
+    const includeSellerDetails = Boolean(user.role === 'seller' && isSellerPrivateRoute)
     return {
       ...sellerProfile,
       name: user.name || sellerProfile?.name || '',
       email: user.email || '',
-      headline: sellerProfile?.headline || '',
-      about: sellerProfile?.about || '',
-      avatar: sellerProfile?.avatar || user?.avatarUrl || '',
-      location: sellerProfile?.location || '',
-      languages: sellerProfile?.languages || [],
+      headline: includeSellerDetails ? sellerProfile?.headline || '' : '',
+      about: includeSellerDetails ? sellerProfile?.about || '' : '',
+      avatar: user?.avatarUrl || sellerProfile?.avatar || '',
+      location: includeSellerDetails ? sellerProfile?.location || '' : '',
+      languages: includeSellerDetails ? sellerProfile?.languages || [] : [],
+      skills: includeSellerDetails ? sellerProfile?.skills || sellerProfile?.specialties || [] : [],
+      specialties: includeSellerDetails ? sellerProfile?.specialties || sellerProfile?.skills || [] : [],
       stats: sellerProfile?.stats || { projects: userGigCount, response: '—', repeat: '—' },
     }
-  }, [sellerProfiles, user, userGigCount, userSellerId])
+  }, [location.pathname, mySellerProfile, user, userGigCount])
 
   const myReviewList = useMemo(
-    () => (userSellerId ? sellerReviews[userSellerId] || [] : []),
-    [sellerReviews, userSellerId],
+    () => (mySellerProfileId ? sellerReviews[mySellerProfileId] || [] : []),
+    [mySellerProfileId, sellerReviews],
   )
 
   const pendingChatOrder = useMemo(() => {
@@ -310,6 +567,14 @@ function App() {
       setView(user?.role === 'seller' ? 'seller-dashboard' : 'seller-apply')
       return
     }
+    if (location.pathname === '/seller/orders') {
+      setView('seller-orders')
+      return
+    }
+    if (location.pathname === '/orders') {
+      setView('buyer-orders')
+      return
+    }
     if (location.pathname === '/seller/apply') {
       setView('seller-apply')
       return
@@ -334,6 +599,10 @@ function App() {
       setView('chat')
       return
     }
+    if (location.pathname === '/search') {
+      setView('search-results')
+      return
+    }
     if (location.pathname === '/categories') {
       setView('categories')
       return
@@ -344,6 +613,13 @@ function App() {
     }
     if (location.pathname === '/terms') {
       setView('terms')
+      return
+    }
+    if (location.pathname === '/me/seller') {
+      if (user?.role !== 'seller') {
+        navigate('/me', { replace: true })
+      }
+      setView('user-profile')
       return
     }
     if (location.pathname === '/me') {
@@ -359,7 +635,7 @@ function App() {
       return
     }
     setView('dashboard')
-  }, [location.pathname, navigate, user?.isSeller])
+  }, [location.pathname, navigate, user?.isSeller, user?.role])
 
   useEffect(() => {
     syncViewFromPath()
@@ -368,19 +644,37 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(location.search || '')
     const email = params.get('email') || ''
-    const token = params.get('token') || ''
+    const tokenParam = params.get('token') || ''
+    const token = /^\d{6}$/.test(tokenParam) ? tokenParam : ''
     if (location.pathname === '/verify-email') {
-      setVerifyForm((prev) => ({ ...prev, email, token }))
+      const storedEmail = email || getStoredVerificationEmail()
+      if (storedEmail) {
+        setStoredVerificationEmail(storedEmail)
+      }
+      setVerifyForm((prev) => ({ ...prev, email: storedEmail || prev.email, token }))
     }
     if (location.pathname === '/reset-password') {
       setResetForm((prev) => ({ ...prev, email, token }))
     }
   }, [location.pathname, location.search])
 
-  const profileOrders = useMemo(() => {
-    if (!user) return []
-    return user.isSeller ? sellerOrders : buyerOrders
-  }, [buyerOrders, sellerOrders, user])
+  useEffect(() => {
+    if (location.pathname !== '/search') return
+    const params = new URLSearchParams(location.search || '')
+    const search = params.get('search') || ''
+    setGigFilters((prev) => {
+      if (prev.search === search) return prev
+      return { ...prev, search, page: 1 }
+    })
+  }, [location.pathname, location.search])
+
+  useEffect(() => {
+    if (location.pathname === '/search') return
+    setGigFilters((prev) => {
+      if (!prev.search) return prev
+      return { ...prev, search: '', page: 1 }
+    })
+  }, [location.pathname])
 
   const myRatingSummary = useMemo(() => {
     if (!myReviewList.length) return { average: 0, count: 0 }
@@ -572,64 +866,112 @@ function App() {
     if (!authToken || !user) {
       setBuyerOrders([])
       setSellerOrders([])
+      seenOrderActivityRef.current = new Map()
       return
     }
     let cancelled = false
-    Promise.all([
-      authedFetch('/api/orders?role=buyer'),
-      authedFetch('/api/orders?role=seller'),
-    ])
-      .then(([buyerData, sellerData]) => {
-        if (cancelled) return
-        setBuyerOrders(buyerData?.orders || [])
-        setSellerOrders(sellerData?.orders || [])
+    const currentUserId = user?._id || user?.id || ''
+    const syncOrders = (nextBuyerOrders, nextSellerOrders, announceUpdates = false) => {
+      setBuyerOrders(nextBuyerOrders)
+      setSellerOrders(nextSellerOrders)
+
+      const previousActivity = seenOrderActivityRef.current
+      const mergedById = new Map()
+      ;[...nextBuyerOrders, ...nextSellerOrders].forEach((order) => {
+        const orderId = getOrderIdentity(order)
+        if (!orderId) return
+        const existing = mergedById.get(orderId)
+        if (!existing || getOrderTimestamp(order) >= getOrderTimestamp(existing)) {
+          mergedById.set(orderId, order)
+        }
       })
-      .catch((error) => {
+
+      const nextActivity = new Map()
+      mergedById.forEach((order, orderId) => {
+        const status = String(order?.status || 'pending').toLowerCase()
+        const updatedAt = getOrderTimestamp(order)
+        nextActivity.set(orderId, { status, updatedAt })
+
+        if (!announceUpdates) return
+        const previous = previousActivity.get(orderId)
+        const buyerId = getComparableUserId(order?.buyer)
+        const sellerId = getComparableUserId(order?.seller)
+        const isBuyer = String(buyerId) === String(currentUserId || '')
+        const isSeller = String(sellerId) === String(currentUserId || '')
+
+        if (!isBuyer && !isSeller) return
+
+        if (!previous) {
+          if (!isSeller) return
+          queueNotification({
+            type: 'order',
+            title: 'New order received',
+            body: `${order?.gigTitle || 'A gig'} has a new order request.`,
+            action: { kind: 'seller-orders' },
+            dedupeKey: `order:new:${orderId}`,
+          })
+          return
+        }
+
+        if (previous.status === status) return
+        const recentMutation = recentOrderMutationsRef.current.get(orderId)
+        if (recentMutation) {
+          const mutationAgeMs = Date.now() - (recentMutation.at || 0)
+          if (mutationAgeMs > 60000) {
+            recentOrderMutationsRef.current.delete(orderId)
+          } else if (recentMutation.status === status) {
+            recentOrderMutationsRef.current.delete(orderId)
+            return
+          }
+        }
+        const statusLabel = toOrderStatusLabel(status)
+        const perspective = isSeller ? 'Buyer workflow updated.' : 'Seller workflow updated.'
+        queueNotification({
+          type: 'order',
+          title: `Order ${statusLabel}`,
+          body: `${order?.gigTitle || 'Your order'} • ${perspective}`,
+          action: { kind: isSeller ? 'seller-orders' : 'buyer-orders' },
+          dedupeKey: `order:status:${orderId}:${status}:${updatedAt}`,
+        })
+      })
+
+      seenOrderActivityRef.current = nextActivity
+    }
+
+    const loadOrders = async (announceUpdates = false) => {
+      try {
+        const [buyerData, sellerData] = await Promise.all([
+          authedFetch('/api/orders?role=buyer'),
+          authedFetch('/api/orders?role=seller'),
+        ])
+        if (cancelled) return
+        syncOrders(buyerData?.orders || [], sellerData?.orders || [], announceUpdates)
+      } catch (error) {
         console.error('Failed to load orders', error)
-      })
+      }
+    }
+
+    loadOrders(false)
+    const intervalId = setInterval(() => {
+      loadOrders(true)
+    }, ORDER_POLL_INTERVAL_MS)
+
     return () => {
       cancelled = true
+      clearInterval(intervalId)
     }
-  }, [authToken, user])
+  }, [authToken, queueNotification, user])
 
   useEffect(() => {
-    if (view !== 'seller-analytics' || !authToken || !user) {
-      return
-    }
-    if (!user.isSeller && user.role !== 'admin') {
-      setAnalyticsError('Seller access required.')
-      return
-    }
+    if (!activeSellerId) return undefined
     let cancelled = false
-    setIsAnalyticsLoading(true)
-    setAnalyticsError('')
-    authedFetch(`/api/analytics/seller?rangeDays=${analyticsRangeDays}&slaHours=${analyticsSlaHours}`)
-      .then((data) => {
-        if (cancelled) return
-        setSellerAnalytics(data)
-      })
-      .catch((error) => {
-        if (cancelled) return
-        setAnalyticsError(error.message || 'Unable to load analytics.')
-      })
-      .finally(() => {
-        if (!cancelled) setIsAnalyticsLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [analyticsRangeDays, analyticsSlaHours, analyticsRefreshKey, authToken, user, view])
-
-  useEffect(() => {
-    if (!selectedSellerId) return undefined
-    let cancelled = false
-    fetchJSON(`/api/reviews/${selectedSellerId}`)
+    fetchJSON(`/api/reviews/${activeSellerId}`)
       .then((data) => {
         if (cancelled) return
         const normalized = (data?.reviews || []).map(normalizeReview)
         setSellerReviews((prev) => ({
           ...prev,
-          [selectedSellerId]: normalized,
+          [activeSellerId]: normalized,
         }))
       })
       .catch((error) => {
@@ -639,7 +981,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [selectedSellerId])
+  }, [activeSellerId])
 
   const buildThreadTitleFromGig = (gig) => {
     if (!gig) return 'Conversation'
@@ -742,24 +1084,71 @@ function App() {
     if (!user || !authToken) {
       setChatThreads([])
       setUnreadTotal(0)
+      seenThreadActivityRef.current = new Map()
       return
     }
     let cancelled = false
-    authedFetch('/api/chats')
-      .then((data) => {
+    const currentUserId = user?._id || user?.id || ''
+    const syncThreads = (normalizedThreads, announceUpdates = false) => {
+      const previousActivity = seenThreadActivityRef.current
+      const nextActivity = new Map()
+
+      normalizedThreads.forEach((thread) => {
+        const lastMessage = thread.messages?.[thread.messages.length - 1] || null
+        const lastMessageAt = lastMessage?.sentAt || thread.lastUpdatedAt || 0
+        nextActivity.set(thread.id, { lastMessageAt })
+
+        if (!announceUpdates) return
+        const previous = previousActivity.get(thread.id)
+        if (previous && lastMessageAt <= previous.lastMessageAt) return
+        if (!lastMessage) return
+        if (String(lastMessage.senderId || '') === String(currentUserId || '')) return
+        if ((thread.unreadCount || 0) <= 0) return
+
+        const isSellerPerspective = String(thread.sellerUserId || '') === String(currentUserId || '')
+        const senderName = isSellerPerspective
+          ? thread.buyerName || lastMessage.senderName || 'Buyer'
+          : thread.sellerName || lastMessage.senderName || 'Seller'
+        const body =
+          (lastMessage.text || '').trim() ||
+          (lastMessage.attachments?.length ? 'Shared an attachment.' : `New message about ${thread.gigTitle}.`)
+
+        queueNotification({
+          type: 'message',
+          title: `New message from ${senderName}`,
+          body: body.slice(0, 140),
+          action: { kind: 'chat', threadId: thread.id },
+          dedupeKey: `message:${thread.id}:${lastMessageAt}`,
+        })
+      })
+
+      seenThreadActivityRef.current = nextActivity
+      setChatThreads(normalizedThreads)
+      const total = normalizedThreads.reduce((sum, thread) => sum + (thread.unreadCount || 0), 0)
+      setUnreadTotal(total)
+    }
+
+    const loadChats = async (announceUpdates = false) => {
+      try {
+        const data = await authedFetch('/api/chats')
         if (cancelled) return
         const normalized = (data?.threads || []).map(normalizeThread).filter(Boolean)
-        setChatThreads(normalized)
-        const total = normalized.reduce((sum, thread) => sum + (thread.unreadCount || 0), 0)
-        setUnreadTotal(total)
-      })
-      .catch((error) => {
+        syncThreads(normalized, announceUpdates)
+      } catch (error) {
         console.error('Failed to load chats', error)
-      })
+      }
+    }
+
+    loadChats(false)
+    const intervalId = setInterval(() => {
+      loadChats(true)
+    }, CHAT_POLL_INTERVAL_MS)
+
     return () => {
       cancelled = true
+      clearInterval(intervalId)
     }
-  }, [authToken, normalizeThread, user])
+  }, [authToken, normalizeThread, queueNotification, user])
 
   useEffect(() => {
     if (!user || !authToken || !selectedThreadId) return undefined
@@ -788,9 +1177,13 @@ function App() {
   const ensureSellerProfile = (sellerId, sellerName, extras = {}) => {
     if (!sellerId) return
     setSellerProfiles((prev) => {
-      if (prev.some((profile) => profile.id === sellerId)) return prev
+      const profileUserId = extras.userId || ''
+      if (prev.some((profile) => profile.id === sellerId || (profileUserId && profile.userId === profileUserId))) {
+        return prev
+      }
       const profile = {
         id: sellerId,
+        userId: profileUserId,
         name: sellerName || '',
         headline: extras.headline || '',
         about: extras.about || '',
@@ -800,7 +1193,7 @@ function App() {
         specialties: extras.specialties || [],
         languages: extras.languages || [],
         stats: extras.stats || { projects: 0, response: '—', repeat: '—' },
-        socials: extras.socials || { website: '', instagram: '' },
+        socials: extras.socials || { website: '', instagram: '', otherSocial: '' },
         availability: extras.availability || '',
       }
       return [...prev, profile]
@@ -833,37 +1226,146 @@ function App() {
     trackGigView(gig)
   }
 
-  const handleOpenMyProfile = () => {
+  const handleOpenBuyerProfile = () => {
     if (!user) return
-    const sellerId = userSellerId || buildSellerId(user.email || user.name || '')
-    ensureSellerProfile(sellerId, user.name || 'Member')
-    setSelectedSellerId(sellerId)
     setView('user-profile')
     navigate('/me')
   }
 
+  const handleOpenSellerPrivateProfile = () => {
+    if (!user) return
+    if (user.role !== 'seller') {
+      setMessage('Complete seller onboarding first to open seller private profile.')
+      startSellerApplication()
+      return
+    }
+    const sellerId = mySellerProfile?.id || userSellerId || buildSellerId(user.email || user.name || '')
+    ensureSellerProfile(sellerId, user.name || 'Member', {
+      userId: user._id || user.id || '',
+      avatar: mySellerProfile?.avatar || user.avatarUrl || '',
+      headline: mySellerProfile?.headline || '',
+      about: mySellerProfile?.about || '',
+      location: mySellerProfile?.location || '',
+      specialties: mySellerProfile?.skills || mySellerProfile?.specialties || [],
+      languages: mySellerProfile?.languages || [],
+      socials: mySellerProfile?.socials || { website: '', instagram: '', otherSocial: '' },
+    })
+    setSelectedSellerId(sellerId)
+    setView('user-profile')
+    navigate('/me/seller')
+  }
+
+  const handleOpenMyProfile = () => {
+    if (!user) return
+    if (user.isSeller) {
+      handleOpenSellerPrivateProfile()
+      return
+    }
+    handleOpenBuyerProfile()
+  }
+
   const handleOpenSellerDashboard = () => {
     if (!user) return
-    setView('seller-analytics')
+    if (!user.isSeller) {
+      setMessage('Switch to seller mode to open the seller dashboard.')
+      return
+    }
+    navigate('/seller-tools#seller-dashboard')
   }
+
+  const handleOpenSellerOrders = () => {
+    if (!user) return
+    if (!user.isSeller) {
+      setMessage('Switch to seller mode to open seller orders.')
+      return
+    }
+    markNotificationsByTypeRead('order')
+    navigate('/seller/orders')
+  }
+
+  const handleOpenBuyerOrders = () => {
+    if (!user) {
+      setMessage('Log in to view your buyer orders.')
+      navigate('/orders')
+      return
+    }
+    if (user.isSeller) {
+      setMessage('Switch to buyer mode to open buyer orders.')
+      return
+    }
+    markNotificationsByTypeRead('order')
+    navigate('/orders')
+  }
+
+  const handleOpenNotification = useCallback(
+    (notification) => {
+      if (!notification) return
+      markNotificationRead(notification.id)
+      dismissNotificationToast(notification.id)
+
+      const actionKind = notification.action?.kind || ''
+      if (actionKind === 'chat' && notification.action?.threadId) {
+        setSelectedThreadId(notification.action.threadId)
+        navigate(`/chats/${notification.action.threadId}`)
+        return
+      }
+      if (actionKind === 'seller-orders') {
+        handleOpenSellerOrders()
+        return
+      }
+      if (actionKind === 'buyer-orders') {
+        handleOpenBuyerOrders()
+      }
+    },
+    [
+      dismissNotificationToast,
+      handleOpenBuyerOrders,
+      handleOpenSellerOrders,
+      markNotificationRead,
+      navigate,
+    ],
+  )
 
   const handleViewPublicSellerProfile = () => {
     if (!user) return
-    const sellerId = userSellerId || buildSellerId(user.email || user.name || '')
-    ensureSellerProfile(sellerId, user.name || 'Member')
+    if (user.role !== 'seller') {
+      setMessage('Complete seller onboarding first to view your public seller profile.')
+      return
+    }
+    const sellerId = mySellerProfile?.id || userSellerId || buildSellerId(user.email || user.name || '')
+    ensureSellerProfile(sellerId, user.name || 'Member', {
+      userId: user._id || user.id || '',
+      avatar: mySellerProfile?.avatar || user.avatarUrl || '',
+      headline: mySellerProfile?.headline || '',
+      about: mySellerProfile?.about || '',
+      location: mySellerProfile?.location || '',
+      specialties: mySellerProfile?.skills || mySellerProfile?.specialties || [],
+      languages: mySellerProfile?.languages || [],
+      socials: mySellerProfile?.socials || { website: '', instagram: '', otherSocial: '' },
+    })
     setSelectedSellerId(sellerId)
     navigate(`/seller/${sellerId}`)
   }
 
-  const handleRefreshMySellerProfile = async () => {
+  const handleRefreshMySellerProfile = useCallback(async () => {
     if (!user || !authToken) return null
     try {
       const data = await authedFetch('/api/profiles/me')
       if (data?.profile) {
         const normalized = normalizeProfile(data.profile)
         setSellerProfiles((prev) => {
-          const filtered = prev.filter((profile) => profile.id !== normalized.id && profile._id !== normalized.id)
+          const filtered = prev.filter((profile) => {
+            if (profile.id === normalized.id || profile._id === normalized.id) return false
+            if (normalized.userId && profile.userId && profile.userId === normalized.userId) return false
+            return true
+          })
           return [...filtered, normalized]
+        })
+        setSelectedSellerId((prev) => {
+          if (!prev) return normalized.id
+          if (prev === normalized.id) return prev
+          if (prev === userSellerId) return normalized.id
+          return prev
         })
         return normalized
       }
@@ -871,15 +1373,15 @@ function App() {
       setMessage(error.message || 'Unable to load seller profile.')
     }
     return null
-  }
+  }, [authToken, user, userSellerId])
 
   useEffect(() => {
-    if (user?.isSeller && authToken && !hasSyncedSellerProfile) {
+    if (user?.role === 'seller' && authToken && !hasSyncedSellerProfile) {
       handleRefreshMySellerProfile().finally(() => setHasSyncedSellerProfile(true))
     }
     // We intentionally omit handleRefreshMySellerProfile from deps to avoid re-sync loops.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authToken, hasSyncedSellerProfile, user?.isSeller])
+  }, [authToken, hasSyncedSellerProfile, user?.role])
 
   const handleUpdateSellerProfile = async (updates) => {
     if (!user || !authToken) {
@@ -887,23 +1389,50 @@ function App() {
       return
     }
     try {
+      const payload = { ...updates }
+      if (updates?.profilePicture) {
+        const formData = new FormData()
+        formData.append('file', updates.profilePicture)
+        const upload = await authedFetch('/api/uploads/image', {
+          method: 'POST',
+          body: formData,
+        })
+        if (upload?.url) {
+          payload.imageUrl = upload.url
+        }
+      }
+      delete payload.profilePicture
+
       setMessage('Saving your seller profile...')
       const data = await authedFetch('/api/profiles/me', {
         method: 'PUT',
-        body: updates,
+        body: payload,
       })
       const updatedProfile = data?.profile
       if (updatedProfile) {
         const normalized = normalizeProfile(updatedProfile)
         setSellerProfiles((prev) => {
-          const filtered = prev.filter(
-            (profile) => profile.id !== normalized.id && profile._id !== normalized.id,
-          )
+          const filtered = prev.filter((profile) => {
+            if (profile.id === normalized.id || profile._id === normalized.id) return false
+            if (normalized.userId && profile.userId && profile.userId === normalized.userId) return false
+            return true
+          })
           return [...filtered, normalized]
         })
+        setSelectedSellerId((prev) => {
+          if (!prev) return normalized.id
+          if (prev === normalized.id) return prev
+          if (prev === userSellerId) return normalized.id
+          return prev
+        })
       }
-      if (updates.displayName) {
-        setUser((prev) => (prev ? { ...prev, name: updates.displayName } : prev))
+      if (payload.imageUrl) {
+        setUser((prev) =>
+          prev ? { ...prev, avatarUrl: payload.imageUrl, avatar: payload.imageUrl } : prev,
+        )
+      }
+      if (payload.displayName) {
+        setUser((prev) => (prev ? { ...prev, name: payload.displayName } : prev))
       }
       setMessage('Seller profile updated.')
     } catch (error) {
@@ -919,20 +1448,101 @@ function App() {
   }
 
   const goToDashboard = useCallback(() => navigate('/'), [navigate])
-  const goToSellerTools = useCallback(() => navigate('/seller-tools'), [navigate])
-  const goToChats = useCallback(() => navigate('/chats'), [navigate])
+  const goToChats = useCallback(() => {
+    markNotificationsByTypeRead('message')
+    navigate('/chats')
+  }, [markNotificationsByTypeRead, navigate])
+  const goToMarketplace = useCallback(() => {
+    setGigFilters((prev) => ({
+      ...prev,
+      search: '',
+      category: '',
+      minPrice: '',
+      maxPrice: '',
+      sort: 'newest',
+      page: 1,
+    }))
+    navigate('/search')
+  }, [navigate])
 
+  const getOrderParticipantId = (participant) =>
+    participant?._id?.toString?.() || participant?.id?.toString?.() || participant?.toString?.() || ''
 
-  const handleOpenChatFromOrder = (order) => {
-    if (!order) return
-    const matchingGig = gigs.find((gig) => gig.id === order.gigId)
-    const fallbackGig = {
-      id: order.gigId,
-      title: order.gigTitle,
-      sellerId: order.sellerId || '',
-      seller: user?.name || 'Seller',
+  const ensureThreadForOrder = async (order) => {
+    if (!order) throw new Error('Order details are missing.')
+    if (!user || !authToken) throw new Error('Log in to open order chats.')
+
+    const currentUserId = user?._id || user?.id || ''
+    const buyerUserId = getOrderParticipantId(order.buyer)
+    const sellerUserId = getOrderParticipantId(order.seller)
+
+    if (!buyerUserId || !sellerUserId) {
+      throw new Error('Unable to determine order participants for chat.')
     }
-    handleOpenChatFromGig(matchingGig || fallbackGig)
+
+    if (currentUserId !== buyerUserId && currentUserId !== sellerUserId) {
+      throw new Error('You can only message participants from your own orders.')
+    }
+
+    const existingThread = chatThreads.find((thread) => {
+      if (thread.gigId !== order.gigId) return false
+      const sameBuyer = !buyerUserId || thread.buyerUserId === buyerUserId
+      const sameSeller = !sellerUserId || thread.sellerUserId === sellerUserId
+      return sameBuyer && sameSeller
+    })
+    if (existingThread) return existingThread
+
+    const sellerName =
+      order.sellerName || sellerNameById[order.sellerId] || selectedSeller?.name || 'Seller'
+    const created = await authedFetch('/api/chats', {
+      method: 'POST',
+      body: {
+        participantIds: [buyerUserId, sellerUserId],
+        title: buildThreadTitleFromGig({ id: order.gigId, title: order.gigTitle }),
+        gigId: order.gigId,
+        gigTitle: order.gigTitle,
+        sellerId: sellerUserId,
+        buyerId: buyerUserId,
+        sellerName,
+        buyerName:
+          currentUserId === buyerUserId ? user.name || 'Buyer' : order.buyerName || 'Buyer',
+      },
+    })
+    const threadId = created?.thread?._id || created?.thread?.id
+    let normalized = null
+    if (threadId) {
+      const fetched = await authedFetch(`/api/chats/${threadId}`)
+      normalized = normalizeThread(fetched?.thread || created?.thread)
+    } else if (created?.thread) {
+      normalized = normalizeThread(created.thread)
+    }
+
+    if (!normalized) throw new Error('Unable to open chat.')
+
+    setChatThreads((prev) => [
+      normalized,
+      ...prev.filter((thread) => thread.id !== normalized.id),
+    ])
+
+    return normalized
+  }
+
+  const handleOpenChatFromOrder = async (order) => {
+    if (!order) return
+    if (!user || !authToken) {
+      setMessage('Log in to message about this order.')
+      openLoginModal()
+      return
+    }
+    try {
+      const thread = await ensureThreadForOrder(order)
+      setComposerText('')
+      setComposerFiles([])
+      setSelectedThreadId(thread.id)
+      navigate(`/chats/${thread.id}`)
+    } catch (error) {
+      setMessage(error.message || 'Unable to open order chat.')
+    }
   }
 
   const handleOpenProfile = () => {
@@ -940,17 +1550,24 @@ function App() {
     handleOpenMyProfile()
   }
 
-  const handleOpenSellerTools = () => {
+  const handleOpenSellerTools = (sectionId = '') => {
     if (!user) {
       setMessage('Log in first.')
       return
     }
     if (user.role === 'seller') {
-      navigate('/seller-tools')
+      if (!user.isSeller) {
+        setMessage('Switch to seller mode to open seller tools.')
+        return
+      }
+      const targetPath = sectionId ? `/seller-tools#${sectionId}` : '/seller-tools'
+      navigate(targetPath)
       return
     }
     startSellerApplication()
   }
+
+  const handleOpenSellerCreateGig = () => handleOpenSellerTools('create-gig')
 
   const getCategoryIcon = (label) => {
     for (const group of serviceCategories) {
@@ -983,6 +1600,20 @@ function App() {
     setGigFilters((prev) => ({ ...prev, [field]: value, page: field === 'page' ? value : 1 }))
   }
 
+  const handleGigSearchSubmit = (value) => {
+    const trimmed = String(value || '').trim()
+    setGigFilters((prev) => ({ ...prev, search: trimmed, page: 1 }))
+    if (trimmed) {
+      const params = new URLSearchParams()
+      params.set('search', trimmed)
+      navigate(`/search?${params.toString()}`, { replace: true })
+      return
+    }
+    if (location.pathname === '/search') {
+      navigate('/', { replace: true })
+    }
+  }
+
   const handleClearGigFilters = () => {
     setGigFilters((prev) => ({
       ...prev,
@@ -993,6 +1624,9 @@ function App() {
       sort: 'newest',
       page: 1,
     }))
+    if (location.pathname === '/search') {
+      navigate('/', { replace: true })
+    }
   }
 
   const readFileAsDataUrl = (file) =>
@@ -1050,16 +1684,25 @@ function App() {
         const orderSellerId = data.order.sellerId || ''
         const orderComplete = data.order.status === 'complete'
         const isBuyer = data.order.buyer?.toString?.() === userId || data.order.buyer === userId
+        const matchesOrder = (order) =>
+          String(order?._id || order?.id || '') === String(orderId)
         setBuyerOrders((prev) =>
           prev.map((order) =>
-            order._id === orderId || order.id === orderId ? data.order : order,
+            matchesOrder(order) ? data.order : order,
           ),
         )
         setSellerOrders((prev) =>
           prev.map((order) =>
-            order._id === orderId || order.id === orderId ? data.order : order,
+            matchesOrder(order) ? data.order : order,
           ),
         )
+        const updatedOrderId = getOrderIdentity(data.order)
+        if (updatedOrderId) {
+          recentOrderMutationsRef.current.set(updatedOrderId, {
+            status: String(data.order.status || status || 'pending').toLowerCase(),
+            at: Date.now(),
+          })
+        }
         setMessage(
           status === 'cancelled'
             ? 'Order cancelled.'
@@ -1101,6 +1744,10 @@ function App() {
       setMessage('Log in to save gigs.')
       return
     }
+    if (user.isSeller) {
+      setMessage('Buyer mode required to save gigs.')
+      return
+    }
     const isFav = favoriteGigIds.includes(gig.id)
     try {
       const endpoint = isFav ? `/api/favorites/gig/${gig.id}` : '/api/favorites'
@@ -1120,6 +1767,10 @@ function App() {
     if (!sellerId) return
     if (!user || !authToken) {
       setMessage('Log in to save sellers.')
+      return
+    }
+    if (user.isSeller) {
+      setMessage('Buyer mode required to save sellers.')
       return
     }
     const isFav = favoriteSellerIds.includes(sellerId)
@@ -1143,6 +1794,10 @@ function App() {
 
   const handleSubmitInquiry = async (gig) => {
     if (!gig) return
+    if (user?.isSeller) {
+      setMessage('Buyer mode required to contact sellers from gig listings.')
+      return
+    }
     const { message: inquiryMessage } = inquiryDraft
     if (!inquiryMessage) {
       setMessage('Share a short brief or question before sending.')
@@ -1168,6 +1823,10 @@ function App() {
     if (!gig) return
     if (!user || !authToken) {
       setMessage('Log in to place an order.')
+      return
+    }
+    if (user.isSeller) {
+      setMessage('Buyer mode required to place an order.')
       return
     }
     const userId = user._id || user.id
@@ -1201,6 +1860,10 @@ function App() {
     if (!selectedThread) return
     if (!user || !authToken) {
       setMessage('Log in to start a gig.')
+      return
+    }
+    if (user.isSeller) {
+      setMessage('Buyer mode required to start a gig.')
       return
     }
     if (!selectedThread.gigId) {
@@ -1335,6 +1998,17 @@ function App() {
       }
     }
 
+    const currentUserId = user?._id || user?.id || ''
+    const payloadSellerId =
+      selectedThread.sellerUserId ||
+      selectedGig?.sellerUserId ||
+      selectedGig?.owner ||
+      selectedGig?.sellerId ||
+      ''
+    const payloadBuyerId =
+      selectedThread.buyerUserId ||
+      (payloadSellerId && currentUserId !== payloadSellerId ? currentUserId : '')
+
     const payload = {
       text,
       files: uploadedFiles.map((file) => ({
@@ -1345,22 +2019,13 @@ function App() {
       })),
       gigId: selectedThread.gigId || selectedGig?.id || '',
       gigTitle: selectedThread.gigTitle || selectedGig?.title || '',
-      sellerId:
-        selectedThread.sellerUserId ||
-        selectedGig?.sellerUserId ||
-        selectedGig?.owner ||
-        selectedGig?.sellerId ||
-        '',
-      buyerId: user._id || user.id,
+      sellerId: payloadSellerId,
+      buyerId: payloadBuyerId || currentUserId,
       sellerName: selectedThread.sellerName || selectedGig?.seller || 'Seller',
-      buyerName: user.name || 'Buyer',
-      participantIds: [
-        selectedThread.sellerUserId ||
-          selectedGig?.sellerUserId ||
-          selectedGig?.owner ||
-          selectedGig?.sellerId ||
-          '',
-      ].filter(Boolean),
+      buyerName:
+        selectedThread.buyerName ||
+        (payloadBuyerId && payloadBuyerId === currentUserId ? user.name || 'Buyer' : 'Buyer'),
+      participantIds: [payloadSellerId, payloadBuyerId].filter(Boolean),
     }
 
     const postMessage = (threadId) =>
@@ -1478,9 +2143,9 @@ function App() {
     if (!gig) return
     const userId = user?._id || user?.id
     const isOwner =
-      user?.isSeller &&
-      ((gig.owner && userId && gig.owner === userId) ||
-        (gig.sellerId && userSellerId && gig.sellerId === userSellerId))
+      (gig.owner && userId && gig.owner === userId) ||
+      (gig.sellerId && mySellerProfileId && gig.sellerId === mySellerProfileId) ||
+      (gig.sellerId && userSellerId && gig.sellerId === userSellerId)
     if (isOwner) {
       setMessage('You cannot message yourself from your own gig.')
       return
@@ -1531,8 +2196,8 @@ function App() {
       setFormErrors((prev) => ({ ...prev, signup: 'Use a valid email address.' }))
       return
     }
-    if (password.length < 8) {
-      setFormErrors((prev) => ({ ...prev, signup: 'Password must be at least 8 characters.' }))
+    if (!PASSWORD_REQUIREMENTS_REGEX.test(password)) {
+      setFormErrors((prev) => ({ ...prev, signup: PASSWORD_REQUIREMENTS_MESSAGE }))
       return
     }
     setFormErrors((prev) => ({ ...prev, signup: '' }))
@@ -1550,6 +2215,7 @@ function App() {
         persistAuth(data.token, data.user, data.refreshToken)
       } else if (data?.user && data?.emailVerified === false) {
         setVerifyForm({ email: emailValue, token: '' })
+        setStoredVerificationEmail(emailValue)
         setMessage(data?.message || 'Verify your email before logging in.')
         navigate('/verify-email')
       }
@@ -1561,6 +2227,7 @@ function App() {
         data?.message || 'Account created. Please verify your email before logging in.',
       )
       setVerifyForm({ email: emailValue, token: '' })
+      setStoredVerificationEmail(emailValue)
       navigate('/verify-email')
       setShowSignupPassword(false)
     } catch (error) {
@@ -1602,6 +2269,7 @@ function App() {
         persistAuth(data.token, data.user, data.refreshToken)
       } else if (data?.message && /verify/i.test(data.message)) {
         setVerifyForm({ email: email.trim().toLowerCase(), token: '' })
+        setStoredVerificationEmail(email.trim().toLowerCase())
         setMessage(data.message)
         navigate('/verify-email')
         return
@@ -1706,8 +2374,51 @@ function App() {
           }
         }),
       )
-      setGigMedia((prev) => [...uploads, ...prev].slice(0, 10))
-      setMessage('Media uploaded. Finish your gig details and submit.')
+      const existingMedia = Array.isArray(gigMedia) ? gigMedia : []
+      let imageCount = existingMedia.filter((item) => item.type !== 'video').length
+      let videoCount = existingMedia.filter((item) => item.type === 'video').length
+      let skippedImages = 0
+      let skippedVideos = 0
+
+      const accepted = uploads.filter((item) => {
+        if (item.type === 'video') {
+          if (videoCount >= GIG_VIDEO_LIMIT) {
+            skippedVideos += 1
+            return false
+          }
+          videoCount += 1
+          return true
+        }
+        if (imageCount >= GIG_IMAGE_LIMIT) {
+          skippedImages += 1
+          return false
+        }
+        imageCount += 1
+        return true
+      })
+
+      if (accepted.length > 0) {
+        setGigMedia((prev) => [...accepted, ...prev])
+      }
+
+      const skippedParts = []
+      if (skippedImages > 0) skippedParts.push(`${skippedImages} image${skippedImages === 1 ? '' : 's'}`)
+      if (skippedVideos > 0) skippedParts.push(`${skippedVideos} video${skippedVideos === 1 ? '' : 's'}`)
+
+      if (skippedParts.length > 0) {
+        const skippedText = skippedParts.join(' and ')
+        if (accepted.length > 0) {
+          setMessage(
+            `Uploaded ${accepted.length} file${accepted.length === 1 ? '' : 's'}. Skipped ${skippedText} (limit: ${GIG_IMAGE_LIMIT} images and ${GIG_VIDEO_LIMIT} videos).`,
+          )
+        } else {
+          setMessage(
+            `Upload limit reached. You can add up to ${GIG_IMAGE_LIMIT} images and ${GIG_VIDEO_LIMIT} videos.`,
+          )
+        }
+      } else {
+        setMessage('Media uploaded. Finish your gig details and submit.')
+      }
     } catch (error) {
       const message = error.message || 'Upload failed. Try again.'
       setMessage(message)
@@ -1742,6 +2453,15 @@ function App() {
       .filter((pkg) => pkg.name || pkg.description || Number.isFinite(pkg.price))
     const packagePrices = normalizedPackages.map((pkg) => (Number.isFinite(pkg.price) ? pkg.price : 0))
     const hasPackagePrice = packagePrices.some((value) => Number.isFinite(value) && value > 0)
+    const imageMediaCount = gigMedia.filter((item) => item.type !== 'video').length
+    const videoMediaCount = gigMedia.filter((item) => item.type === 'video').length
+
+    if (imageMediaCount > GIG_IMAGE_LIMIT || videoMediaCount > GIG_VIDEO_LIMIT) {
+      setMessage(
+        `You can attach up to ${GIG_IMAGE_LIMIT} images and ${GIG_VIDEO_LIMIT} videos per gig.`,
+      )
+      return
+    }
 
     const errors = { title: '', category: '', price: '', packages: '' }
     if (!title || !category) {
@@ -1838,10 +2558,19 @@ const handleForgotPassword = async () => {
 
 const handleVerifySubmit = async (event) => {
   event.preventDefault()
-  const email = verifyForm.email.trim().toLowerCase()
+  const email =
+    verifyForm.email.trim().toLowerCase() || getStoredVerificationEmail().trim().toLowerCase()
   const token = verifyForm.token.trim()
-  if (!email || !token) {
-    setMessage('Add your email and verification code.')
+  if (!token) {
+    setMessage('Add the 6-digit verification code.')
+    return
+  }
+  if (!/^\d{6}$/.test(token)) {
+    setMessage('Enter the 6-digit verification code.')
+    return
+  }
+  if (!email) {
+    setMessage('Please sign in again to resend a verification code.')
     return
   }
   try {
@@ -1853,6 +2582,8 @@ const handleVerifySubmit = async (event) => {
     if (data?.user && data?.token) {
       persistAuth(data.token, data.user, data.refreshToken)
       setMessage('Email verified. Welcome!')
+      setVerifyForm({ email: '', token: '' })
+      setStoredVerificationEmail('')
     } else {
       setMessage('Email verified.')
     }
@@ -1865,9 +2596,13 @@ const handleVerifySubmit = async (event) => {
 }
 
 const handleResendVerification = async () => {
-  const email = verifyForm.email.trim().toLowerCase() || forms.signup.email || forms.login.email
+  const email =
+    verifyForm.email.trim().toLowerCase() ||
+    getStoredVerificationEmail().trim().toLowerCase() ||
+    forms.signup.email ||
+    forms.login.email
   if (!email) {
-    setMessage('Enter your email to resend verification.')
+    setMessage('Please sign in again to resend a verification code.')
     return
   }
   try {
@@ -1876,6 +2611,7 @@ const handleResendVerification = async () => {
       method: 'POST',
       body: { email },
     })
+    setStoredVerificationEmail(email)
     setMessage('If an account exists, a verification email has been sent.')
   } catch (error) {
     setMessage(error.message || 'Unable to resend verification.')
@@ -1893,8 +2629,8 @@ const handleResetSubmit = async (event) => {
     setMessage('Add email, code, and new password.')
     return
   }
-  if (password.length < 8) {
-    setMessage('Password must be at least 8 characters.')
+  if (!PASSWORD_REQUIREMENTS_REGEX.test(password)) {
+    setMessage(PASSWORD_REQUIREMENTS_MESSAGE)
     return
   }
   try {
@@ -1949,6 +2685,14 @@ const openSignupModal = () => {
       return
     }
     const value = event.target.value
+    if (field === 'country') {
+      setSellerForm((prev) => ({
+        ...prev,
+        country: value,
+        otherCountry: value === 'Others' ? prev.otherCountry : '',
+      }))
+      return
+    }
     setSellerForm((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -2006,10 +2750,12 @@ const openSignupModal = () => {
     }))
   }
 
-  const normalizeSingaporePhone = (value) => {
-    const digits = (value || '').replace(/\D/g, '')
-    if (digits.length === 8) return `+65${digits}`
-    if (digits.length === 10 && digits.startsWith('65')) return `+65${digits.slice(-8)}`
+  const normalizePhoneNumber = (value) => {
+    const raw = String(value || '').trim()
+    if (!raw) return null
+    if (/^\+\d{7,15}$/.test(raw)) return raw
+    const digits = raw.replace(/\D/g, '')
+    if (digits.length >= 7 && digits.length <= 15) return `+${digits}`
     return null
   }
 
@@ -2020,13 +2766,19 @@ const openSignupModal = () => {
       return
     }
     const { fullName, displayName, description, phone, skills, languages } = sellerForm
-    if (!fullName || !displayName || !description || !phone) {
-      setSellerError('Complete your name, display details, description, and phone number.')
+    if (!fullName || !displayName || !description || !phone || !sellerForm.country) {
+      setSellerError('Complete your name, display details, description, phone number, and country.')
       return
     }
-    const normalizedPhone = normalizeSingaporePhone(phone)
+    const selectedCountry =
+      sellerForm.country === 'Others' ? sellerForm.otherCountry.trim() : sellerForm.country.trim()
+    if (!selectedCountry) {
+      setSellerError('Enter a country when selecting Others.')
+      return
+    }
+    const normalizedPhone = normalizePhoneNumber(phone)
     if (!normalizedPhone) {
-      setSellerError('Enter a valid Singapore number in +65XXXXXXXX format (8 digits).')
+      setSellerError('Enter a valid phone number in international format (for example, +6591234567).')
       return
     }
     if (skills.length === 0) {
@@ -2048,7 +2800,9 @@ const openSignupModal = () => {
       languages: languageList,
       websiteUrl: sellerForm.website.trim(),
       instagramUrl: sellerForm.instagram.trim(),
+      otherSocialUrl: sellerForm.otherSocial.trim(),
       phone: normalizedPhone,
+      location: selectedCountry,
     }
     try {
       setSellerError('')
@@ -2075,14 +2829,19 @@ const openSignupModal = () => {
       if (data?.profile) {
         const normalized = normalizeProfile(data.profile)
       setSellerProfiles((prev) => {
-          const others = prev.filter((profile) => profile.id !== normalized.id)
-          return [normalized, ...others]
+        const others = prev.filter((profile) => {
+          if (profile.id === normalized.id) return false
+          if (normalized.userId && profile.userId && profile.userId === normalized.userId) return false
+          return true
         })
+        return [normalized, ...others]
+      })
         setSelectedSellerId(normalized.id)
       }
       setUser((prev) => (prev ? { ...prev, isSeller: true, role: 'seller' } : prev))
       setSellerForm(initialSellerForm)
       setView('seller-dashboard')
+      navigate('/seller-tools')
       setMessage('Seller profile saved. Draft your first gig to go live.')
     } catch (error) {
       const message = error.message || 'Unable to save seller profile.'
@@ -2146,17 +2905,16 @@ const openSignupModal = () => {
       setMessage('Log in as a buyer to leave a review.')
       return
     }
+    if (user.isSeller) {
+      setMessage('Buyer mode required to leave a review.')
+      return
+    }
     const userId = user._id || user.id
     if (selectedSeller?.userId && selectedSeller.userId === userId) {
       setMessage('You cannot review your own profile.')
       return
     }
-    const hasQualifyingOrder = buyerOrders.some(
-      (order) =>
-        (order.sellerId && order.sellerId === selectedSellerId) &&
-        ['delivered', 'complete'].includes(order.status),
-    )
-    if (!hasQualifyingOrder) {
+    if (!canLeaveReviewForSelectedSeller) {
       setMessage('Complete an order with this seller before leaving a review.')
       return
     }
@@ -2202,21 +2960,68 @@ const openSignupModal = () => {
   }
 
   const isWorkspaceView = view === 'dashboard' || view === 'login' || view === 'signup'
+  const isSearchView = view === 'search-results'
   const currentYear = new Date().getFullYear()
 
   return (
     <div className="min-h-screen bg-white text-slate-900 antialiased overflow-x-hidden">
       <TopBar
         user={user}
+        unreadMessageCount={unreadTotal}
+        unreadOrderCount={orderNotificationCount}
+        notifications={notifications}
+        notificationUnreadCount={notificationUnreadCount}
         onDashboard={goToDashboard}
+        onMarketplace={goToMarketplace}
+        onBecomeSeller={() => handleOpenSellerTools()}
         onLogin={openLoginModal}
         onSignup={openSignupModal}
         onChat={goToChats}
-        onSellerTools={handleOpenSellerTools}
+        onOrders={handleOpenBuyerOrders}
         onProfile={handleOpenProfile}
+        onSellerCreateGig={handleOpenSellerCreateGig}
+        onSellerDashboard={handleOpenSellerDashboard}
+        onSellerProfile={handleOpenSellerPrivateProfile}
+        onSellerOrders={handleOpenSellerOrders}
         onLogout={handleLogout}
         onSwitchMode={handleSwitchUserMode}
+        onOpenNotification={handleOpenNotification}
+        onMarkNotificationRead={markNotificationRead}
+        onMarkAllNotificationsRead={markAllNotificationsRead}
       />
+
+      {notificationToasts.length > 0 && (
+        <div className="fixed right-4 top-20 z-50 space-y-2 sm:right-6">
+          {notificationToasts.map((notification) => (
+            <div
+              key={notification.id}
+              className="w-[min(92vw,360px)] rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-lg"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <button
+                  type="button"
+                  className="flex-1 text-left"
+                  onClick={() => handleOpenNotification(notification)}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
+                    {notification.type === 'order' ? 'Order update' : 'Message'}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{notification.title}</p>
+                  {notification.body && <p className="mt-1 text-xs text-slate-600">{notification.body}</p>}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                  onClick={() => dismissNotificationToast(notification.id)}
+                  aria-label="Dismiss notification"
+                >
+                  x
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {message && (
@@ -2266,6 +3071,8 @@ const openSignupModal = () => {
 
         {isWorkspaceView && (
           <DashboardView
+            user={user}
+            buyerOrders={buyerOrders}
             serviceSlides={serviceSlides}
             currentServiceSlide={currentServiceSlide}
             currentSlide={currentSlide}
@@ -2287,6 +3094,27 @@ const openSignupModal = () => {
             favoriteGigIds={favoriteGigIds}
             onToggleFavoriteGig={handleToggleFavoriteGig}
             onGigFilterChange={handleGigFilterChange}
+            onSearchSubmit={handleGigSearchSubmit}
+            onClearGigFilters={handleClearGigFilters}
+            onOpenBuyerOrders={handleOpenBuyerOrders}
+          />
+        )}
+
+        {isSearchView && (
+          <SearchResultsView
+            user={user}
+            gigs={gigs}
+            totalGigs={totalGigs}
+            gigFilters={gigFilters}
+            totalPages={totalGigPages}
+            formatter={formatter}
+            onOpenSellerProfile={handleOpenSellerProfile}
+            onOpenChat={handleOpenChatFromGig}
+            onOpenGig={handleOpenGigDetail}
+            favoriteGigIds={favoriteGigIds}
+            onToggleFavoriteGig={handleToggleFavoriteGig}
+            onGigFilterChange={handleGigFilterChange}
+            onSearchSubmit={handleGigSearchSubmit}
             onClearGigFilters={handleClearGigFilters}
           />
         )}
@@ -2294,6 +3122,9 @@ const openSignupModal = () => {
         {view === 'chat' && (
           <ChatView
             chatThreads={chatThreads}
+            chatRoleFilter={chatRoleFilter}
+            chatThreadCounts={chatThreadCounts}
+            onChatRoleFilterChange={setChatRoleFilter}
             chatSearch={chatSearch}
             onSearchChange={setChatSearch}
             visibleThreads={visibleThreads}
@@ -2349,7 +3180,7 @@ const openSignupModal = () => {
             onSubmitInquiry={() => handleSubmitInquiry(selectedGig)}
             onCreateOrder={() => handleCreateOrder(selectedGig)}
             user={user}
-            userSellerId={userSellerId}
+            userSellerId={mySellerProfileId}
           />
         )}
 
@@ -2363,13 +3194,12 @@ const openSignupModal = () => {
             formatter={formatter}
             timeAgo={timeAgo}
             user={user}
-            canViewAnalytics={selectedSellerIsOwner}
             isOwner={selectedSellerIsOwner}
             savedGigs={savedGigs}
             savedSellers={savedSellers}
             buyerBriefs={buyerBriefs}
-            onOpenAnalytics={() => setView('seller-analytics')}
-            onBackToDashboard={goToDashboard}
+            canLeaveReview={canLeaveReviewForSelectedSeller}
+            onBackToPrivateProfile={handleOpenSellerPrivateProfile}
             onSubmitReview={handleSubmitReview}
             onReviewDraftChange={handleReviewDraftChange}
             onOpenChatFromGig={handleOpenChatFromGig}
@@ -2388,9 +3218,9 @@ const openSignupModal = () => {
             user={user}
             profile={myProfile}
             myGigs={myGigs}
+            buyerOrders={buyerOrders}
             reviewList={myReviewList}
             ratingSummary={myRatingSummary}
-            orders={profileOrders}
             formatter={formatter}
             timeAgo={timeAgo}
             buyerBrief={buyerBrief}
@@ -2402,37 +3232,17 @@ const openSignupModal = () => {
             onBackToDashboard={goToDashboard}
             onViewPublicProfile={handleViewPublicSellerProfile}
             onOpenSellerTools={handleOpenSellerTools}
-            onOpenSellerDashboard={handleOpenSellerDashboard}
+            onOpenBuyerOrders={handleOpenBuyerOrders}
             onRefreshSellerProfile={handleRefreshMySellerProfile}
             onUpdateSellerProfile={handleUpdateSellerProfile}
             competencyLevels={competencyLevels}
-            onOpenChatFromGig={handleOpenChatFromGig}
-            onOpenGigFromOrder={handleOpenGigDetail}
             onOpenGigFromSaved={handleOpenGigDetail}
             onOpenSellerProfile={handleOpenSellerProfile}
-            onRequestOrderCancel={handleRequestOrderCancel}
-            onRequestOrderComplete={handleRequestOrderComplete}
             onBuyerBriefChange={handleBuyerBriefChange}
             onSubmitBuyerBrief={handleSubmitBuyerBrief}
+            profileWorkspace={location.pathname === '/me/seller' ? 'seller' : 'buyer'}
           />
         )}
-
-        {view === 'seller-analytics' && (
-          <SellerAnalyticsView
-            user={user}
-            analytics={sellerAnalytics}
-            isLoading={isAnalyticsLoading}
-            error={analyticsError}
-            rangeDays={analyticsRangeDays}
-            slaHours={analyticsSlaHours}
-            onBackToDashboard={goToDashboard}
-            onOpenProfile={handleOpenMyProfile}
-            onOpenPublicProfile={handleViewPublicSellerProfile}
-            onRefresh={() => setAnalyticsRefreshKey((prev) => prev + 1)}
-          />
-        )}
-
-
 
         {view === 'seller-dashboard' && (
           <SellerDashboardView
@@ -2443,22 +3253,14 @@ const openSignupModal = () => {
             gigErrors={gigErrors}
             gigMedia={gigMedia}
             isUploadingMedia={isUploadingMedia}
-            userSellerId={userSellerId}
             inputClasses={sellerInputClasses}
             categoryOptions={categoryOptions}
             myGigs={myGigs}
             formatter={formatter}
-            onOpenGigFromOrder={handleOpenGigDetail}
-            onOpenChatFromOrder={handleOpenChatFromOrder}
-            onRequestOrderAccept={handleRequestOrderAccept}
-            onRequestOrderCancel={handleRequestOrderCancel}
-            onRequestOrderComplete={handleRequestOrderComplete}
-            onBackToDashboard={goToDashboard}
-            onOpenProfile={handleOpenMyProfile}
+            onOpenProfile={handleOpenProfile}
             onOpenLogin={openLoginModal}
             onOpenSignup={openSignupModal}
             onStartApplication={startSellerApplication}
-            onOpenSellerProfile={handleOpenSellerProfile}
             onGigChange={handleGigChange}
             onAddPackage={handleAddPackage}
             onPackageChange={handlePackageChange}
@@ -2466,6 +3268,46 @@ const openSignupModal = () => {
             onGigFiles={handleGigFiles}
             onRemoveGigMedia={handleRemoveGigMedia}
             onCreateGig={handleCreateGig}
+            showCreateGigPanel={location.hash === '#create-gig'}
+            showDashboardPanel={location.hash !== '#create-gig'}
+          />
+        )}
+
+        {view === 'seller-orders' && (
+          <SellerOrdersView
+            user={user}
+            mode="seller"
+            buyerOrders={buyerOrders}
+            sellerOrders={sellerOrders}
+            formatter={formatter}
+            onOpenGigFromOrder={handleOpenGigDetail}
+            onOpenChatFromOrder={handleOpenChatFromOrder}
+            onRequestOrderAccept={handleRequestOrderAccept}
+            onRequestOrderCancel={handleRequestOrderCancel}
+            onRequestOrderComplete={handleRequestOrderComplete}
+            onOpenLogin={openLoginModal}
+            onOpenSignup={openSignupModal}
+            onStartApplication={startSellerApplication}
+            onOpenProfile={handleOpenProfile}
+          />
+        )}
+
+        {view === 'buyer-orders' && (
+          <SellerOrdersView
+            user={user}
+            mode="buyer"
+            buyerOrders={buyerOrders}
+            sellerOrders={sellerOrders}
+            sellerNameById={sellerNameById}
+            formatter={formatter}
+            onOpenGigFromOrder={handleOpenGigDetail}
+            onOpenChatFromOrder={handleOpenChatFromOrder}
+            onRequestOrderCancel={handleRequestOrderCancel}
+            onRequestOrderComplete={handleRequestOrderComplete}
+            onOpenLogin={openLoginModal}
+            onOpenSignup={openSignupModal}
+            onStartApplication={startSellerApplication}
+            onOpenProfile={handleOpenProfile}
           />
         )}
 
@@ -2558,6 +3400,7 @@ const openSignupModal = () => {
                           key={gig.id}
                           gig={gig}
                           index={index}
+                          showBuyerActions={!user?.isSeller}
                           formatter={formatter}
                           onOpenSellerProfile={handleOpenSellerProfile}
                           onOpenChat={handleOpenChatFromGig}
@@ -2640,22 +3483,23 @@ const openSignupModal = () => {
               <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Verify email</p>
               <h2 className="text-2xl font-semibold text-slate-900">Verify your email</h2>
               <p className="text-sm text-slate-600">
-                Enter the verification code from your inbox to activate your account.
+                Enter the 6-digit code from your inbox to activate your account.
               </p>
             </div>
             <form className="mt-5 grid gap-3 sm:grid-cols-2" onSubmit={handleVerifySubmit}>
               <input
-                type="email"
-                className={inputClasses}
-                placeholder="Email address"
-                value={verifyForm.email}
-                onChange={(e) => setVerifyForm((prev) => ({ ...prev, email: e.target.value }))}
-              />
-              <input
-                className={inputClasses}
-                placeholder="Verification code"
+                className={`${inputClasses} sm:col-span-2`}
+                placeholder="6-digit code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
                 value={verifyForm.token}
-                onChange={(e) => setVerifyForm((prev) => ({ ...prev, token: e.target.value }))}
+                onChange={(e) =>
+                  setVerifyForm((prev) => ({
+                    ...prev,
+                    token: e.target.value.replace(/\D/g, '').slice(0, 6),
+                  }))
+                }
               />
               <Button
                 type="submit"

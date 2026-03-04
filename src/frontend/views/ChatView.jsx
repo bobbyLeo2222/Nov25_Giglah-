@@ -4,6 +4,9 @@ import { formatChatTime, timeAgo } from '@/frontend/helpers'
 
 function ChatView({
   chatThreads = [],
+  chatRoleFilter = 'all',
+  chatThreadCounts = { all: 0, buyer: 0, seller: 0 },
+  onChatRoleFilterChange,
   chatSearch = '',
   onSearchChange,
   visibleThreads = [],
@@ -26,22 +29,76 @@ function ChatView({
 }) {
   const [previewAttachment, setPreviewAttachment] = useState(null)
   const [previewZoom, setPreviewZoom] = useState(1)
+  const currentUserId = user?._id || user?.id || ''
+  const canUseRoleTabs = user?.role === 'seller'
+  const effectiveRoleFilter = canUseRoleTabs ? chatRoleFilter : 'all'
+  const activeThreadCount =
+    effectiveRoleFilter === 'seller'
+      ? chatThreadCounts.seller
+      : effectiveRoleFilter === 'buyer'
+        ? chatThreadCounts.buyer
+        : chatThreadCounts.all
+
+  const inboxTitle =
+    effectiveRoleFilter === 'seller'
+      ? 'Messages with buyers'
+      : effectiveRoleFilter === 'buyer'
+        ? 'Messages with freelancers'
+        : canUseRoleTabs
+          ? 'All messages'
+          : 'Messages with freelancers'
+
+  const inboxDescription =
+    effectiveRoleFilter === 'seller'
+      ? 'Respond to buyer enquiries and keep delivery discussions in one place.'
+      : effectiveRoleFilter === 'buyer' || !canUseRoleTabs
+        ? 'Open a gig card and tap Chat to jump into a conversation with the seller.'
+        : 'See every conversation across buyer and seller workflows in one inbox.'
+
+  const emptyMessage =
+    effectiveRoleFilter === 'seller'
+      ? 'No buyer conversations yet. Buyer enquiries for your gigs will appear here.'
+      : effectiveRoleFilter === 'buyer' || !canUseRoleTabs
+        ? 'No conversations yet. Open a gig and hit Chat to reach the seller.'
+        : 'No conversations yet. Start from a gig to begin messaging.'
+  const selectedThreadIsBuyer = Boolean(currentUserId && selectedThread?.buyerUserId === currentUserId)
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-1">
         <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Inbox</p>
-        <h2 className="text-2xl font-semibold text-slate-900">Messages with freelancers</h2>
-        <p className="text-sm text-slate-500">
-          Open a gig card and tap Chat to jump into a conversation with the seller.
-        </p>
+        <h2 className="text-2xl font-semibold text-slate-900">{inboxTitle}</h2>
+        <p className="text-sm text-slate-500">{inboxDescription}</p>
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[320px_1fr]">
         <div className="flex h-[70vh] flex-col rounded-2xl bg-slate-50/70 p-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-900">Threads</p>
-            <span className="text-xs text-slate-500">{chatThreads.length} active</span>
+            <span className="text-xs text-slate-500">{activeThreadCount} active</span>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(canUseRoleTabs
+              ? [
+                  { id: 'all', label: `All (${chatThreadCounts.all})` },
+                  { id: 'buyer', label: `As Buyer (${chatThreadCounts.buyer})` },
+                  { id: 'seller', label: `As Seller (${chatThreadCounts.seller})` },
+                ]
+              : [{ id: 'all', label: `All (${chatThreadCounts.all})` }]
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  effectiveRoleFilter === tab.id
+                    ? 'border-purple-300 bg-purple-100 text-purple-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:text-purple-700'
+                }`}
+                onClick={() => onChatRoleFilterChange?.(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
           <div className="mt-3">
             <input
@@ -54,11 +111,15 @@ function ChatView({
           <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
             {visibleThreads.length === 0 && (
               <p className="rounded-xl border border-dashed border-slate-200 bg-white/80 px-3 py-4 text-sm text-slate-500">
-                No conversations yet. Open a gig and hit Chat to reach the seller.
+                {emptyMessage}
               </p>
             )}
             {visibleThreads.map((thread) => {
               const lastMessage = thread.messages[thread.messages.length - 1]
+              const isSellerPerspective = currentUserId ? thread.sellerUserId === currentUserId : false
+              const counterpartLabel = isSellerPerspective
+                ? thread.buyerName || 'Buyer'
+                : thread.sellerName || 'Seller'
               return (
                 <button
                   key={thread.id}
@@ -73,7 +134,7 @@ function ChatView({
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">{thread.gigTitle}</p>
-                      <p className="text-xs text-slate-500">{thread.sellerName}</p>
+                      <p className="text-xs text-slate-500">{counterpartLabel}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       {thread.unreadCount > 0 && (
@@ -128,7 +189,7 @@ function ChatView({
                       Accept gig
                     </Button>
                   )}
-                  {!isOwnGig && (
+                  {!isOwnGig && selectedThreadIsBuyer && (
                     <Button
                       type="button"
                       className="bg-purple-600 text-white hover:bg-purple-500"

@@ -3,6 +3,7 @@ import User from '../models/User.js'
 import asyncHandler from '../utils/asyncHandler.js'
 import slugify from '../utils/slugify.js'
 import normalizeUrl from '../utils/normalizeUrl.js'
+import escapeRegExp from '../utils/escapeRegExp.js'
 
 const isObjectId = (value = '') => /^[0-9a-fA-F]{24}$/.test(value)
 
@@ -22,8 +23,9 @@ export const getProfiles = asyncHandler(async (req, res) => {
   const query = {}
 
   if (category) query.category = category
-  if (search) {
-    const regex = new RegExp(search, 'i')
+  const trimmedSearch = search ? String(search).trim() : ''
+  if (trimmedSearch) {
+    const regex = new RegExp(escapeRegExp(trimmedSearch), 'i')
     query.$or = [{ displayName: regex }, { headline: regex }]
   }
 
@@ -76,6 +78,7 @@ export const upsertProfile = asyncHandler(async (req, res) => {
     location: req.body.location,
     instagramUrl: normalizeUrl(req.body.instagramUrl),
     websiteUrl: normalizeUrl(req.body.websiteUrl),
+    otherSocialUrl: normalizeUrl(req.body.otherSocialUrl),
     imageUrl: req.body.imageUrl,
     phone: req.body.phone,
     availability: req.body.availability,
@@ -106,6 +109,7 @@ export const upsertProfile = asyncHandler(async (req, res) => {
 
   const userUpdate = {}
   if (payload.displayName) userUpdate.name = payload.displayName
+  if (payload.imageUrl) userUpdate.avatarUrl = payload.imageUrl
   userUpdate.role = 'seller'
   await User.findByIdAndUpdate(req.user.id, userUpdate)
 

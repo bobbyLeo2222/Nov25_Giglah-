@@ -15,6 +15,7 @@ const sellerProfileSchema = new mongoose.Schema(
     location: { type: String },
     instagramUrl: { type: String },
     websiteUrl: { type: String },
+    otherSocialUrl: { type: String },
     imageUrl: { type: String },
     phone: { type: String },
     availability: { type: String, default: 'Available' },
