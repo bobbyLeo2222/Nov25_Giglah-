@@ -78,13 +78,12 @@ function TopBar({
   const formatNotificationTime = (value) => {
     const timestamp = new Date(value || 0).getTime()
     if (!timestamp) return ''
-    const diffMs = Date.now() - timestamp
-    const diffMinutes = Math.max(1, Math.floor(diffMs / 60000))
-    if (diffMinutes < 60) return `${diffMinutes}m ago`
-    const diffHours = Math.floor(diffMinutes / 60)
-    if (diffHours < 24) return `${diffHours}h ago`
-    const diffDays = Math.floor(diffHours / 24)
-    return `${diffDays}d ago`
+    return new Intl.DateTimeFormat('en-SG', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(timestamp)
   }
 
 
@@ -119,18 +118,6 @@ function TopBar({
                   Become a Seller
                 </button>
               )}
-              <button
-                type="button"
-                className="relative transition hover:text-purple-600"
-                onClick={() => run(onChat)}
-              >
-                Messages
-                {unreadMessageCount > 0 && (
-                  <span className="absolute -right-3 -top-2 min-w-[18px] rounded-full bg-purple-600 px-1.5 py-[1px] text-[10px] font-semibold leading-4 text-white">
-                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                  </span>
-                )}
-              </button>
               <div className="relative">
                 <button
                   type="button"
@@ -178,6 +165,21 @@ function TopBar({
                       )}
                     </div>
                     <div className="max-h-80 overflow-y-auto">
+                      <button
+                        type="button"
+                        className="w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50"
+                        onClick={() => run(onChat)}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-900">Messages inbox</p>
+                          <span className="text-[11px] font-semibold text-purple-700">
+                            {unreadMessageCount > 0
+                              ? `${unreadMessageCount > 99 ? '99+' : unreadMessageCount} unread`
+                              : 'Open'}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-600">View all conversations and message updates.</p>
+                      </button>
                       {!hasNotifications && (
                         <p className="px-4 py-4 text-sm text-slate-500">No notifications yet.</p>
                       )}
@@ -395,18 +397,6 @@ function TopBar({
                     Become a Seller
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="relative w-full text-left transition hover:text-purple-600"
-                  onClick={() => run(onChat)}
-                >
-                  Messages
-                  {unreadMessageCount > 0 && (
-                    <span className="ml-2 inline-flex min-w-[18px] items-center justify-center rounded-full bg-purple-600 px-1.5 py-[1px] text-[10px] font-semibold leading-4 text-white">
-                      {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                    </span>
-                  )}
-                </button>
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2">
                   <button
                     type="button"
@@ -436,6 +426,18 @@ function TopBar({
                   </button>
                   {isNotificationsOpen && (
                     <div className="mt-2 space-y-1 border-t border-slate-200 pt-2">
+                      <button
+                        type="button"
+                        className="w-full rounded-lg px-2 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                        onClick={() => run(onChat)}
+                      >
+                        Messages inbox
+                        {unreadMessageCount > 0 && (
+                          <span className="ml-1 text-purple-700">
+                            ({unreadMessageCount > 99 ? '99+' : unreadMessageCount})
+                          </span>
+                        )}
+                      </button>
                       {notificationUnreadCount > 0 && (
                         <button
                           type="button"

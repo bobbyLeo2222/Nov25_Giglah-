@@ -14,35 +14,30 @@ function GigDetailView({
   onOpenRelatedGig,
   isFavorited = false,
   onToggleFavorite,
-  inquiryDraft,
-  onInquiryChange,
-  onSubmitInquiry,
   relatedGigs = [],
-  onCreateOrder,
   user,
   userSellerId,
 }) {
-  if (!gig) {
-    return (
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="space-y-3">
-          <p className="text-lg font-semibold text-slate-900">Gig not found</p>
-          <p className="text-sm text-slate-600">
-            Pick a listing from the marketplace to view its details.
-          </p>
-          <Button type="button" className="bg-purple-600 text-white hover:bg-purple-500" onClick={onBackToDashboard}>
-            Back to marketplace
-          </Button>
-        </div>
-      </section>
-    )
-  }
-
   const primaryImage =
-    gig.imageUrl || gig.media?.find((item) => item.type === 'image')?.url || ''
-  const primaryVideo =
-    !primaryImage && gig.media ? gig.media.find((item) => item.type === 'video') : null
-  const hasPackages = Array.isArray(gig.packages) && gig.packages.length > 0
+    gig?.imageUrl || gig?.media?.find((item) => item.type === 'image')?.url || ''
+  const normalizedMedia = (() => {
+    const mediaList = Array.isArray(gig?.media)
+      ? gig.media
+          .filter((item) => item?.url)
+          .map((item) => ({
+            ...item,
+            type: item.type === 'video' ? 'video' : 'image',
+          }))
+      : []
+    if (mediaList.length === 0) {
+      return primaryImage ? [{ url: primaryImage, type: 'image', thumbnailUrl: '' }] : []
+    }
+    if (!primaryImage) return mediaList
+    const preferredIndex = mediaList.findIndex((item) => item.url === primaryImage)
+    if (preferredIndex <= 0) return mediaList
+    return [mediaList[preferredIndex], ...mediaList.slice(0, preferredIndex), ...mediaList.slice(preferredIndex + 1)]
+  })()
+  const hasPackages = Array.isArray(gig?.packages) && gig.packages.length > 0
 
   const formatLanguage = (entry) => {
     if (!entry) return ''
@@ -58,10 +53,14 @@ function GigDetailView({
   const userId = user?._id || user?.id
   const canUseBuyerActions = !user?.isSeller
   const isOwner = Boolean(
-    (gig.owner && userId && gig.owner === userId) ||
-      (userSellerId && gig.sellerId === userSellerId),
+    (gig?.owner && userId && gig.owner === userId) ||
+      (userSellerId && gig?.sellerId === userSellerId),
   )
   const [previewImage, setPreviewImage] = useState('')
+  const [selectedMediaUrl, setSelectedMediaUrl] = useState('')
+  const currentMedia = normalizedMedia.find((item) => item.url === selectedMediaUrl) || normalizedMedia[0] || null
+  const activeImage = currentMedia && currentMedia.type !== 'video' ? currentMedia.url : ''
+  const activeVideo = currentMedia?.type === 'video' ? currentMedia : null
   const openPreview = (url) => {
     if (url) setPreviewImage(url)
   }
@@ -71,6 +70,22 @@ function GigDetailView({
       event.preventDefault()
       openPreview(url)
     }
+  }
+
+  if (!gig) {
+    return (
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="space-y-3">
+          <p className="text-lg font-semibold text-slate-900">Gig not found</p>
+          <p className="text-sm text-slate-600">
+            Pick a listing from the marketplace to view its details.
+          </p>
+          <Button type="button" className="bg-purple-600 text-white hover:bg-purple-500" onClick={onBackToDashboard}>
+            Back to marketplace
+          </Button>
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -115,20 +130,20 @@ function GigDetailView({
         <div className="space-y-4">
           <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
             <div className="relative h-72 w-full overflow-hidden rounded-2xl sm:h-96">
-              {primaryImage ? (
+              {activeImage ? (
                 <img
-                  src={primaryImage}
+                  src={activeImage}
                   alt={gig.title}
                   className="h-full w-full cursor-zoom-in object-cover"
                   role="button"
                   tabIndex={0}
-                  onClick={() => openPreview(primaryImage)}
-                  onKeyDown={(event) => handlePreviewKey(event, primaryImage)}
+                  onClick={() => openPreview(activeImage)}
+                  onKeyDown={(event) => handlePreviewKey(event, activeImage)}
                 />
-              ) : primaryVideo ? (
+              ) : activeVideo ? (
                 <video
-                  src={primaryVideo.url}
-                  poster={primaryVideo.thumbnailUrl || undefined}
+                  src={activeVideo.url}
+                  poster={activeVideo.thumbnailUrl || undefined}
                   className="h-full w-full object-cover"
                   controls
                   playsInline
@@ -142,31 +157,45 @@ function GigDetailView({
                 {hasPackages ? `From ${formatter.format(gig.price || 0)}` : formatter.format(gig.price || 0)}
               </div>
             </div>
-            {gig.media?.length > 1 && (
-              <div className="grid gap-3 border-t border-slate-100 bg-white p-4 sm:grid-cols-3">
-                {gig.media.slice(0, 3).map((item, index) => (
-                  <div key={`${item.url}-${index}`} className="overflow-hidden rounded-xl border border-slate-100">
-                    {item.type === 'video' ? (
-                      <video
-                        src={item.url}
-                        poster={item.thumbnailUrl || undefined}
-                        className="h-28 w-full object-cover"
-                        controls
-                        playsInline
-                      />
-                    ) : (
-                      <img
-                        src={item.url}
-                        alt={`${gig.title} ${index + 1}`}
-                        className="h-28 w-full cursor-zoom-in object-cover"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => openPreview(item.url)}
-                        onKeyDown={(event) => handlePreviewKey(event, item.url)}
-                      />
-                    )}
-                  </div>
-                ))}
+            {normalizedMedia.length > 1 && (
+              <div className="grid gap-3 border-t border-slate-100 bg-white p-4 sm:grid-cols-3 lg:grid-cols-4">
+                {normalizedMedia.map((item, index) => {
+                  const isActive = currentMedia?.url === item.url
+                  return (
+                    <button
+                      key={`${item.url}-${index}`}
+                      type="button"
+                      className={`group relative overflow-hidden rounded-xl border transition ${
+                        isActive
+                          ? 'border-purple-300 ring-2 ring-purple-100'
+                          : 'border-slate-100 hover:border-purple-200'
+                      }`}
+                      onClick={() => setSelectedMediaUrl(item.url)}
+                    >
+                      {item.type === 'video' ? (
+                        <>
+                          <video
+                            src={item.url}
+                            poster={item.thumbnailUrl || undefined}
+                            className="h-28 w-full object-cover"
+                            playsInline
+                            muted
+                            preload="metadata"
+                          />
+                          <span className="absolute bottom-2 left-2 rounded-full bg-slate-900/70 px-2 py-0.5 text-[11px] font-semibold text-white">
+                            Video
+                          </span>
+                        </>
+                      ) : (
+                        <img
+                          src={item.url}
+                          alt={`${gig.title} ${index + 1}`}
+                          className="h-28 w-full object-cover"
+                        />
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
