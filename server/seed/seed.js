@@ -126,6 +126,7 @@ const seed = async () => {
   }
 
   console.log('Seeding gigs...')
+  const seededGigsBySeller = new Map()
   for (const gig of initialGigs) {
     const sellerEntry = sellerMap.get(gig.sellerId)
     if (!sellerEntry) {
@@ -133,7 +134,7 @@ const seed = async () => {
       continue
     }
 
-    await Gig.create({
+    const createdGig = await Gig.create({
       title: gig.title,
       seller: sellerEntry.user._id,
       sellerProfile: sellerEntry.sellerProfile._id,
@@ -149,6 +150,9 @@ const seed = async () => {
       websiteUrl: gig.websiteUrl,
       owner: gig.owner || null,
     })
+    const existing = seededGigsBySeller.get(gig.sellerId) || []
+    existing.push(createdGig)
+    seededGigsBySeller.set(gig.sellerId, existing)
   }
 
   console.log('Seeding reviews...')
@@ -159,20 +163,29 @@ const seed = async () => {
       continue
     }
 
-    for (const review of reviews) {
+    const sellerGigs = seededGigsBySeller.get(sellerId) || []
+    if (sellerGigs.length === 0) {
+      console.warn(`Skipping reviews for seller ${sellerId} (no gigs seeded)`)
+      continue
+    }
+
+    for (const [index, review] of reviews.entries()) {
       const buyerUser = await ensureUser({
         name: review.reviewerName,
         email: makeEmail(review.reviewerName),
         role: 'buyer',
       })
+      const gig = sellerGigs[index % sellerGigs.length]
 
       await Review.create({
         seller: sellerEntry.user._id,
         sellerProfile: sellerEntry.sellerProfile._id,
+        gig: gig._id,
         buyer: buyerUser._id,
         rating: review.rating,
         text: review.comment,
-        project: review.project,
+        project: review.project || gig.title,
+        isVerified: true,
       })
     }
   }

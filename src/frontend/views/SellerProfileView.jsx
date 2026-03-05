@@ -5,7 +5,6 @@ function SellerProfileView({
   selectedSeller,
   sellerRatingSummary,
   sellerReviewList,
-  reviewDraft,
   sellerPortfolio,
   formatter,
   timeAgo,
@@ -14,9 +13,6 @@ function SellerProfileView({
   savedGigs = [],
   savedSellers = [],
   buyerBriefs = [],
-  canLeaveReview = false,
-  onSubmitReview,
-  onReviewDraftChange,
   onOpenChatFromGig,
   onOpenGigFromProfile,
   isSellerFavorited = false,
@@ -56,7 +52,6 @@ function SellerProfileView({
   const showBioCard = Boolean(selectedSeller.avatar || hasAbout || hasLanguages || (isOwner && hasAvailability))
   const isSellerMode = Boolean(user?.isSeller)
   const showBuyerActions = !isOwner && !isSellerMode
-  const showReviewForm = showBuyerActions && canLeaveReview
   const initials = selectedSeller.name
     ? selectedSeller.name
         .split(' ')
@@ -473,9 +468,7 @@ function SellerProfileView({
             <div className="mt-4 space-y-3">
               {sellerReviewList.length === 0 && (
                 <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
-                  {showReviewForm
-                    ? `No reviews yet. Be the first buyer to share feedback for ${selectedSeller.name}.`
-                    : `No reviews yet. Only buyers with a completed gig can review ${selectedSeller.name}.`}
+                  No reviews yet. Reviews are posted on completed gig listings.
                 </p>
               )}
               {sellerReviewList.map((review) => (
@@ -483,6 +476,7 @@ function SellerProfileView({
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">{review.reviewerName}</p>
+                      {review.gigTitle && <p className="text-xs text-purple-600">Gig: {review.gigTitle}</p>}
                       {review.project && <p className="text-xs text-slate-500">{review.project}</p>}
                     </div>
                     <span className="text-xs text-slate-400">{review.createdAt ? timeAgo(review.createdAt) : ''}</span>
@@ -503,60 +497,12 @@ function SellerProfileView({
           </div>
 
           {showBuyerActions && (
-            showReviewForm ? (
-              <form
-                className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm"
-                onSubmit={onSubmitReview}
-              >
-                <p className="text-sm font-semibold text-slate-900">Leave a review</p>
-                <p className="text-xs text-slate-500">Share a rating and note to help other buyers choose confidently.</p>
-                <div className="mt-3 space-y-3">
-                  <div className="space-y-1 sm:space-y-2">
-                    <label className="text-xs font-semibold text-slate-700">Rating</label>
-                    <select
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                      value={reviewDraft.rating}
-                      onChange={onReviewDraftChange('rating')}
-                    >
-                      {[5, 4, 3, 2, 1].map((rating) => (
-                        <option key={rating} value={rating}>
-                          {rating} star{rating === 1 ? '' : 's'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1 sm:space-y-2">
-                    <label className="text-xs font-semibold text-slate-700">Project or gig</label>
-                    <input
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                      placeholder="e.g., AI chatbot rollout"
-                      value={reviewDraft.project}
-                      onChange={onReviewDraftChange('project')}
-                    />
-                  </div>
-                  <div className="space-y-1 sm:space-y-2">
-                    <label className="text-xs font-semibold text-slate-700">Review</label>
-                    <textarea
-                      rows={4}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                      placeholder="What went well? How was the communication and delivery?"
-                      value={reviewDraft.text}
-                      onChange={onReviewDraftChange('text')}
-                    />
-                  </div>
-                  <Button type="submit" className="w-full bg-purple-600 text-white hover:bg-purple-500">
-                    Post review
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm">
-                <p className="text-sm font-semibold text-slate-900">Leave a review</p>
-                <p className="mt-1 text-xs text-slate-600">
-                  Complete at least one gig with this seller before posting a review.
-                </p>
-              </div>
-            )
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900">Leave a review</p>
+              <p className="mt-1 text-xs text-slate-600">
+                Reviews are submitted from completed gig listings. Open a gig and post feedback there.
+              </p>
+            </div>
           )}
         </div>
       </div>

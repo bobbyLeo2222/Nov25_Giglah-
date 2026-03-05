@@ -116,6 +116,7 @@ function App() {
   const [sellerError, setSellerError] = useState('')
   const [sellerProfiles, setSellerProfiles] = useState([])
   const [sellerReviews, setSellerReviews] = useState({})
+  const [gigReviews, setGigReviews] = useState({})
   const [selectedSellerId, setSelectedSellerId] = useState('')
   const [selectedGigId, setSelectedGigId] = useState('')
   const [reviewDraft, setReviewDraft] = useState({ rating: 5, text: '', project: '' })
@@ -373,32 +374,46 @@ function App() {
     return Boolean(selectedSeller.id && selectedSeller.id === mySellerProfileId)
   }, [mySellerProfileId, selectedSeller, user])
 
+  const isGigOwner = useCallback(
+    (gig) => {
+      if (!user) return false
+      const owner = gig.owner
+      const userId = user._id || user.id
+      return (
+        owner === user.email ||
+        owner === userId ||
+        (gig.sellerId && mySellerProfileId && gig.sellerId === mySellerProfileId) ||
+        gig.sellerId === userSellerId ||
+        gig.seller === userId
+      )
+    },
+    [mySellerProfileId, user, userSellerId],
+  )
+
   const sellerReviewList = useMemo(
     () => sellerReviews[activeSellerId] || [],
     [activeSellerId, sellerReviews],
   )
 
-  const canLeaveReviewForSelectedSeller = useMemo(() => {
-    if (!user || !authToken || user.isSeller || !activeSellerId || selectedSellerIsOwner) return false
+  const gigReviewList = useMemo(
+    () => (selectedGig?.id ? gigReviews[selectedGig.id] || [] : []),
+    [gigReviews, selectedGig?.id],
+  )
 
-    const selectedSellerUserId = selectedSeller?.userId || ''
+  const canLeaveReviewForSelectedGig = useMemo(() => {
+    if (!selectedGig || !user || !authToken || user.isSeller) return false
+    if (isGigOwner(selectedGig)) return false
+    const userId = user._id || user.id || ''
+    const alreadyReviewed = gigReviewList.some(
+      (review) => String(review.buyerId || '') === String(userId),
+    )
+    if (alreadyReviewed) return false
     return buyerOrders.some((order) => {
       const status = normalizeOrderStatus(order?.status)
       if (status !== 'complete') return false
-
-      const orderSellerProfileId =
-        order?.sellerId || order?.seller?.sellerId || order?.sellerProfile?.sellerId || ''
-      if (orderSellerProfileId && String(orderSellerProfileId) === String(activeSellerId)) return true
-
-      const orderSellerUserId =
-        getComparableUserId(order?.seller) || order?.sellerUserId?.toString?.() || ''
-      return Boolean(
-        selectedSellerUserId &&
-          orderSellerUserId &&
-          String(orderSellerUserId) === String(selectedSellerUserId),
-      )
+      return String(order?.gigId || '') === String(selectedGig.id)
     })
-  }, [activeSellerId, authToken, buyerOrders, selectedSeller?.userId, selectedSellerIsOwner, user])
+  }, [authToken, buyerOrders, gigReviewList, isGigOwner, selectedGig, user])
 
   const relatedGigs = useMemo(() => {
     if (!selectedGig) return []
@@ -468,22 +483,6 @@ function App() {
     const size = Number(gigFilters.pageSize) || 1
     return Math.max(1, Math.ceil((totalGigs || 0) / size))
   }, [gigFilters.pageSize, totalGigs])
-
-  const isGigOwner = useCallback(
-    (gig) => {
-      if (!user) return false
-      const owner = gig.owner
-      const userId = user._id || user.id
-      return (
-        owner === user.email ||
-        owner === userId ||
-        (gig.sellerId && mySellerProfileId && gig.sellerId === mySellerProfileId) ||
-        gig.sellerId === userSellerId ||
-        gig.seller === userId
-      )
-    },
-    [mySellerProfileId, user, userSellerId],
-  )
 
   const visibleThreads = useMemo(() => {
     const effectiveRoleFilter = user?.role === 'seller' ? chatRoleFilter : 'all'
@@ -969,7 +968,7 @@ function App() {
   useEffect(() => {
     if (!activeSellerId) return undefined
     let cancelled = false
-    fetchJSON(`/api/reviews/${activeSellerId}`)
+    fetchJSON(`/api/reviews/seller/${activeSellerId}`)
       .then((data) => {
         if (cancelled) return
         const normalized = (data?.reviews || []).map(normalizeReview)
@@ -986,6 +985,27 @@ function App() {
       cancelled = true
     }
   }, [activeSellerId])
+
+  useEffect(() => {
+    if (!selectedGigId) return undefined
+    let cancelled = false
+    fetchJSON(`/api/reviews/gig/${selectedGigId}`)
+      .then((data) => {
+        if (cancelled) return
+        const normalized = (data?.reviews || []).map(normalizeReview)
+        setGigReviews((prev) => ({
+          ...prev,
+          [selectedGigId]: normalized,
+        }))
+      })
+      .catch((error) => {
+        console.error('Failed to load gig reviews', error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedGigId])
 
   const buildThreadTitleFromGig = (gig) => {
     if (!gig) return 'Conversation'
@@ -1720,9 +1740,10 @@ function App() {
               ? 'Completion recorded.'
               : 'Order updated.',
         )
-        if (orderComplete && isBuyer && orderSellerId) {
+        if (orderComplete && isBuyer && data.order.gigId) {
           setReviewPrompt({
             sellerId: orderSellerId,
+            gigId: data.order.gigId || '',
             gigTitle: data.order.gigTitle || 'this gig',
           })
         }
@@ -3009,8 +3030,8 @@ const openSignupModal = () => {
 
   const handleSubmitReview = async (event) => {
     event.preventDefault()
-    if (!selectedSellerId) {
-      setMessage('Open a seller profile before leaving a review.')
+    if (!selectedGig?.id) {
+      setMessage('Open a gig listing before leaving a review.')
       return
     }
     if (!user || !authToken) {
@@ -3021,13 +3042,8 @@ const openSignupModal = () => {
       setMessage('Buyer mode required to leave a review.')
       return
     }
-    const userId = user._id || user.id
-    if (selectedSeller?.userId && selectedSeller.userId === userId) {
-      setMessage('You cannot review your own profile.')
-      return
-    }
-    if (!canLeaveReviewForSelectedSeller) {
-      setMessage('Complete an order with this seller before leaving a review.')
+    if (!canLeaveReviewForSelectedGig) {
+      setMessage('Complete this gig before leaving a review.')
       return
     }
     const ratingNumber = Number(reviewDraft.rating)
@@ -3037,32 +3053,42 @@ const openSignupModal = () => {
       return
     }
     if (!text) {
-      setMessage('Share a quick note for this seller.')
+      setMessage('Share a quick note for this gig.')
       return
     }
     try {
-      const data = await authedFetch(`/api/reviews/${selectedSellerId}`, {
+      const data = await authedFetch(`/api/reviews/gig/${selectedGig.id}`, {
         method: 'POST',
         body: {
           rating: ratingNumber,
           text,
-          project: reviewDraft.project.trim() || 'Custom brief',
+          project: reviewDraft.project.trim() || selectedGig.title || 'Gig',
         },
       })
       const newReview = data?.review
         ? normalizeReview(data.review)
         : {
             id: `rev-${Date.now()}`,
+            buyerId: user._id || user.id || '',
+            gigId: selectedGig.id,
+            gigTitle: selectedGig.title || 'Gig',
+            sellerId: selectedGig.sellerId || '',
             reviewerName: user.name || 'Buyer',
             rating: ratingNumber,
             comment: text,
-            project: reviewDraft.project.trim() || 'Custom brief',
+            project: reviewDraft.project.trim() || selectedGig.title || 'Gig',
             createdAt: Date.now(),
           }
-      setSellerReviews((prev) => ({
+      setGigReviews((prev) => ({
         ...prev,
-        [selectedSellerId]: [newReview, ...(prev[selectedSellerId] || [])],
+        [selectedGig.id]: [newReview, ...(prev[selectedGig.id] || [])],
       }))
+      if (selectedGig.sellerId) {
+        setSellerReviews((prev) => ({
+          ...prev,
+          [selectedGig.sellerId]: [newReview, ...(prev[selectedGig.sellerId] || [])],
+        }))
+      }
       setReviewDraft({ rating: 5, text: '', project: '' })
       setMessage('Review posted. Thanks for sharing feedback.')
     } catch (error) {
@@ -3145,14 +3171,18 @@ const openSignupModal = () => {
           <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-4 text-sm text-amber-900 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="font-semibold">
-                Order complete for {reviewPrompt.gigTitle}. Leave a review for the seller?
+                Order complete for {reviewPrompt.gigTitle}. Leave a review on the gig listing?
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   className="bg-purple-600 text-white hover:bg-purple-500"
                   onClick={() => {
-                    handleOpenSellerProfile(reviewPrompt.sellerId)
+                    if (reviewPrompt.gigId) {
+                      navigate(`/gig/${reviewPrompt.gigId}`)
+                    } else if (reviewPrompt.sellerId) {
+                      handleOpenSellerProfile(reviewPrompt.sellerId)
+                    }
                     setReviewPrompt(null)
                   }}
                 >
@@ -3278,7 +3308,7 @@ const openSignupModal = () => {
             gig={selectedGig}
             seller={selectedSeller}
             sellerRatingSummary={sellerRatingSummary}
-            sellerReviewList={sellerReviewList}
+            gigReviewList={gigReviewList}
             formatter={formatter}
             onBackToDashboard={goToDashboard}
             onEditGig={handleEditGig}
@@ -3289,6 +3319,10 @@ const openSignupModal = () => {
             relatedGigs={relatedGigs}
             isFavorited={selectedGig ? favoriteGigIds.includes(selectedGig.id) : false}
             onToggleFavorite={() => selectedGig && handleToggleFavoriteGig(selectedGig)}
+            reviewDraft={reviewDraft}
+            canLeaveReview={canLeaveReviewForSelectedGig}
+            onReviewDraftChange={handleReviewDraftChange}
+            onSubmitReview={handleSubmitReview}
             inquiryDraft={inquiryDraft}
             onInquiryChange={handleInquiryChange}
             onSubmitInquiry={() => handleSubmitInquiry(selectedGig)}
@@ -3303,7 +3337,6 @@ const openSignupModal = () => {
             selectedSeller={selectedSeller}
             sellerRatingSummary={sellerRatingSummary}
             sellerReviewList={sellerReviewList}
-            reviewDraft={reviewDraft}
             sellerPortfolio={sellerPortfolio}
             formatter={formatter}
             timeAgo={timeAgo}
@@ -3312,10 +3345,7 @@ const openSignupModal = () => {
             savedGigs={savedGigs}
             savedSellers={savedSellers}
             buyerBriefs={buyerBriefs}
-            canLeaveReview={canLeaveReviewForSelectedSeller}
             onBackToPrivateProfile={handleOpenSellerPrivateProfile}
-            onSubmitReview={handleSubmitReview}
-            onReviewDraftChange={handleReviewDraftChange}
             onOpenChatFromGig={handleOpenChatFromGig}
             onOpenGigFromProfile={handleOpenGigDetail}
             isSellerFavorited={

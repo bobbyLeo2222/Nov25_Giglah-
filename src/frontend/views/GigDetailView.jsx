@@ -6,7 +6,7 @@ function GigDetailView({
   gig,
   seller,
   sellerRatingSummary,
-  sellerReviewList,
+  gigReviewList = [],
   formatter,
   onBackToDashboard,
   onEditGig,
@@ -16,6 +16,10 @@ function GigDetailView({
   onOpenRelatedGig,
   isFavorited = false,
   onToggleFavorite,
+  reviewDraft = { rating: 5, text: '', project: '' },
+  canLeaveReview = false,
+  onReviewDraftChange,
+  onSubmitReview,
   relatedGigs = [],
   user,
   userSellerId,
@@ -364,14 +368,14 @@ function GigDetailView({
           </div>
 
           <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4 shadow-sm">
-            <p className="text-sm font-semibold text-slate-900">Reviews for this seller</p>
+            <p className="text-sm font-semibold text-slate-900">Reviews for this gig</p>
             <div className="mt-3 space-y-3">
-              {sellerReviewList.length === 0 && (
+              {gigReviewList.length === 0 && (
                 <p className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-3 text-sm text-slate-600">
-                  This seller has no reviews yet. Be the first to leave feedback after a job.
+                  This gig has no reviews yet. Feedback appears here after completed orders.
                 </p>
               )}
-              {sellerReviewList.map((review) => (
+              {gigReviewList.map((review) => (
                 <div
                   key={review.id}
                   className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm"
@@ -391,6 +395,63 @@ function GigDetailView({
               ))}
             </div>
           </div>
+
+          {!user?.isSeller && (
+            canLeaveReview ? (
+              <form
+                className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm"
+                onSubmit={onSubmitReview}
+              >
+                <p className="text-sm font-semibold text-slate-900">Leave a review for this gig</p>
+                <p className="text-xs text-slate-500">Share a rating and note based on this completed gig.</p>
+                <div className="mt-3 space-y-3">
+                  <div className="space-y-1 sm:space-y-2">
+                    <label className="text-xs font-semibold text-slate-700">Rating</label>
+                    <select
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                      value={reviewDraft.rating}
+                      onChange={onReviewDraftChange?.('rating')}
+                    >
+                      {[5, 4, 3, 2, 1].map((rating) => (
+                        <option key={rating} value={rating}>
+                          {rating} star{rating === 1 ? '' : 's'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <label className="text-xs font-semibold text-slate-700">Project or context (optional)</label>
+                    <input
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                      placeholder={gig?.title || 'This gig'}
+                      value={reviewDraft.project}
+                      onChange={onReviewDraftChange?.('project')}
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <label className="text-xs font-semibold text-slate-700">Review</label>
+                    <textarea
+                      rows={4}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                      placeholder="How was the delivery and communication for this gig?"
+                      value={reviewDraft.text}
+                      onChange={onReviewDraftChange?.('text')}
+                    />
+                  </div>
+                  <Button type="submit" className="w-full bg-purple-600 text-white hover:bg-purple-500">
+                    Post review
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm">
+                <p className="text-sm font-semibold text-slate-900">Leave a review</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Complete this gig before posting a review.
+                </p>
+              </div>
+            )
+          )}
         </div>
       </div>
       {previewImage && (

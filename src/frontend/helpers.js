@@ -161,6 +161,10 @@ const normalizeProfile = (profile) => {
 
 const normalizeReview = (review) => ({
   id: review._id || review.id,
+  buyerId: review.buyer?._id || review.buyer?.id || review.buyer || '',
+  sellerId: review.gig?.sellerId || review.sellerId || '',
+  gigId: review.gig?._id || review.gig?.id || review.gigId || '',
+  gigTitle: review.gig?.title || review.gigTitle || review.project || 'Gig',
   reviewerName: review.buyer?.name || review.reviewerName || 'Buyer',
   rating: review.rating,
   comment: review.text || review.comment,
