@@ -9,6 +9,8 @@ function GigDetailView({
   sellerReviewList,
   formatter,
   onBackToDashboard,
+  onEditGig,
+  onDeleteGig,
   onOpenSellerProfile,
   onOpenChat,
   onOpenRelatedGig,
@@ -52,6 +54,7 @@ function GigDetailView({
 
   const userId = user?._id || user?.id
   const canUseBuyerActions = !user?.isSeller
+  const canUseSellerActions = Boolean(user?.isSeller)
   const isOwner = Boolean(
     (gig?.owner && userId && gig.owner === userId) ||
       (userSellerId && gig?.sellerId === userSellerId),
@@ -103,6 +106,26 @@ function GigDetailView({
           <Button variant="outline" className="text-slate-700" onClick={onBackToDashboard}>
             Back
           </Button>
+          {canUseSellerActions && isOwner && (
+            <Button
+              type="button"
+              variant="outline"
+              className="border-amber-200 text-amber-700 hover:bg-amber-50"
+              onClick={() => onEditGig?.(gig)}
+            >
+              Edit
+            </Button>
+          )}
+          {canUseSellerActions && isOwner && (
+            <Button
+              type="button"
+              variant="outline"
+              className="border-rose-200 text-rose-700 hover:bg-rose-50"
+              onClick={() => onDeleteGig?.(gig)}
+            >
+              Delete
+            </Button>
+          )}
           {canUseBuyerActions && (
             <Button
               type="button"

@@ -28,6 +28,8 @@ function SellerDashboardView({
   onGigFiles,
   onRemoveGigMedia,
   onCreateGig,
+  isEditingGig = false,
+  onCancelEditGig,
   showCreateGigPanel = true,
   showDashboardPanel = true,
 }) {
@@ -137,6 +139,8 @@ function SellerDashboardView({
           onGigFiles={onGigFiles}
           onRemoveGigMedia={onRemoveGigMedia}
           onCreateGig={onCreateGig}
+          isEditingGig={isEditingGig}
+          onCancelEditGig={onCancelEditGig}
         />
       )}
 

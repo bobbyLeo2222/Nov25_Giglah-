@@ -53,6 +53,13 @@ const CHAT_POLL_INTERVAL_MS = 15000
 const ORDER_POLL_INTERVAL_MS = 20000
 const NOTIFICATION_TOAST_DURATION_MS = 6500
 const MAX_NOTIFICATIONS = 30
+const EMPTY_GIG_FORM = {
+  title: '',
+  category: '',
+  price: '',
+  description: '',
+  packages: [],
+}
 
 const getComparableUserId = (participant) =>
   participant?._id?.toString?.() || participant?.id?.toString?.() || participant?.toString?.() || ''
@@ -84,12 +91,9 @@ function App() {
   const [gigMedia, setGigMedia] = useState([])
   const [isUploadingMedia, setIsUploadingMedia] = useState(false)
   const [newGig, setNewGig] = useState({
-    title: '',
-    category: '',
-    price: '',
-    description: '',
-    packages: [],
+    ...EMPTY_GIG_FORM,
   })
+  const [editingGigId, setEditingGigId] = useState('')
   const [gigErrors, setGigErrors] = useState({
     title: '',
     category: '',
@@ -1567,7 +1571,13 @@ function App() {
     startSellerApplication()
   }
 
-  const handleOpenSellerCreateGig = () => handleOpenSellerTools('create-gig')
+  const handleOpenSellerCreateGig = () => {
+    setEditingGigId('')
+    setNewGig({ ...EMPTY_GIG_FORM })
+    setGigErrors({ title: '', category: '', price: '', packages: '' })
+    setGigMedia([])
+    handleOpenSellerTools('create-gig')
+  }
 
   const getCategoryIcon = (label) => {
     for (const group of serviceCategories) {
@@ -2501,33 +2511,135 @@ function App() {
         imageUrl: primaryImage,
         packages: normalizedPackages,
       }
-      const data = await authedFetch('/api/gigs', {
-        method: 'POST',
+      const isEditingGig = Boolean(editingGigId)
+      const endpoint = isEditingGig ? `/api/gigs/${editingGigId}` : '/api/gigs'
+      const method = isEditingGig ? 'PUT' : 'POST'
+      const data = await authedFetch(endpoint, {
+        method,
         body: payload,
       })
       if (data?.gig) {
         const normalized = normalizeGig(data.gig)
-        setGigs((prev) => [normalized, ...prev])
+        setGigs((prev) =>
+          isEditingGig
+            ? prev.map((entry) => (entry.id === normalized.id ? normalized : entry))
+            : [normalized, ...prev],
+        )
         ensureSellerProfile(normalized.sellerId, normalized.seller)
         setSelectedGigId(normalized.id)
         if (normalized.sellerId) setSelectedSellerId(normalized.sellerId)
         navigate(`/gig/${normalized.id}`)
       }
-      setNewGig({
-        title: '',
-        category: '',
-        price: '',
-        description: '',
-        packages: [],
-      })
+      setNewGig({ ...EMPTY_GIG_FORM })
+      setEditingGigId('')
       setGigErrors({ title: '', category: '', price: '', packages: '' })
       setGigMedia([])
-      setMessage('Gig published and visible on your dashboard.')
+      setMessage(
+        isEditingGig
+          ? 'Gig updated.'
+          : 'Gig published and visible on your dashboard.',
+      )
     } catch (error) {
       const message =
-        error.message || 'Unable to create gig. Make sure your seller profile is saved.'
+        error.message ||
+        (editingGigId
+          ? 'Unable to update gig.'
+          : 'Unable to create gig. Make sure your seller profile is saved.')
       setMessage(message)
     }
+  }
+
+  const handleEditGig = async (gig) => {
+    if (!gig?.id) return
+    if (!user || !authToken) {
+      setMessage('Log in as a seller to edit gigs.')
+      return
+    }
+    if (!user.isSeller) {
+      setMessage('Switch to seller mode to edit gigs.')
+      return
+    }
+    if (!isGigOwner(gig)) {
+      setMessage('You can only edit your own gigs.')
+      return
+    }
+    setEditingGigId(gig.id)
+    setNewGig({
+      title: gig.title || '',
+      category: gig.category || '',
+      price: gig.price ? String(gig.price) : '',
+      description: gig.description || '',
+      packages: Array.isArray(gig.packages)
+        ? gig.packages.map((pkg, index) => ({
+            id: `pkg-${gig.id}-${index}-${Math.random().toString(16).slice(2)}`,
+            name: pkg.name || '',
+            description: pkg.description || '',
+            price: pkg.price === 0 ? '0' : String(pkg.price || ''),
+          }))
+        : [],
+    })
+    setGigMedia(
+      (gig.media || []).map((item, index) => ({
+        id: `media-${gig.id}-${index}-${Math.random().toString(16).slice(2)}`,
+        url: item.url,
+        type: item.type === 'video' ? 'video' : 'image',
+        name: `${gig.title || 'gig'}-${index + 1}`,
+        thumbnailUrl: item.thumbnailUrl || '',
+      })),
+    )
+    setGigErrors({ title: '', category: '', price: '', packages: '' })
+    setMessage('Edit mode opened. Update fields and save your changes.')
+    navigate('/seller-tools#create-gig')
+  }
+
+  const handleDeleteGig = async (gig) => {
+    if (!gig?.id) return
+    if (!user || !authToken) {
+      setMessage('Log in as a seller to delete gigs.')
+      return
+    }
+    if (!user.isSeller) {
+      setMessage('Switch to seller mode to delete gigs.')
+      return
+    }
+    if (!isGigOwner(gig)) {
+      setMessage('You can only delete your own gigs.')
+      return
+    }
+    const confirmed = window.confirm(`Delete "${gig.title || 'this gig'}"? This cannot be undone.`)
+    if (!confirmed) return
+
+    try {
+      await authedFetch(`/api/gigs/${gig.id}`, { method: 'DELETE' })
+      setGigs((prev) => prev.filter((entry) => entry.id !== gig.id))
+      if (editingGigId === gig.id) {
+        setEditingGigId('')
+        setNewGig({ ...EMPTY_GIG_FORM })
+        setGigErrors({ title: '', category: '', price: '', packages: '' })
+        setGigMedia([])
+      }
+      if (selectedGigId === gig.id) {
+        setSelectedGigId('')
+      }
+      setMessage('Gig deleted.')
+    } catch (error) {
+      setMessage(error.message || 'Unable to delete gig.')
+    }
+  }
+
+  const handleCancelEditGig = () => {
+    const targetGigId = editingGigId || selectedGigId
+    setEditingGigId('')
+    setNewGig({ ...EMPTY_GIG_FORM })
+    setGigErrors({ title: '', category: '', price: '', packages: '' })
+    setGigMedia([])
+    if (targetGigId) {
+      setSelectedGigId(targetGigId)
+      navigate(`/gig/${targetGigId}`)
+    } else {
+      navigate('/seller-tools#create-gig')
+    }
+    setMessage('Edit cancelled.')
   }
 
   const inputClasses =
@@ -3169,6 +3281,8 @@ const openSignupModal = () => {
             sellerReviewList={sellerReviewList}
             formatter={formatter}
             onBackToDashboard={goToDashboard}
+            onEditGig={handleEditGig}
+            onDeleteGig={handleDeleteGig}
             onOpenSellerProfile={handleOpenSellerProfile}
             onOpenChat={handleOpenChatFromGig}
             onOpenRelatedGig={handleOpenGigDetail}
@@ -3268,6 +3382,8 @@ const openSignupModal = () => {
             onGigFiles={handleGigFiles}
             onRemoveGigMedia={handleRemoveGigMedia}
             onCreateGig={handleCreateGig}
+            isEditingGig={Boolean(editingGigId)}
+            onCancelEditGig={handleCancelEditGig}
             showCreateGigPanel={location.hash === '#create-gig'}
             showDashboardPanel={location.hash !== '#create-gig'}
           />

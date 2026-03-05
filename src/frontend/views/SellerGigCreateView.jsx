@@ -21,6 +21,8 @@ function SellerGigCreateView({
   onGigFiles,
   onRemoveGigMedia,
   onCreateGig,
+  isEditingGig = false,
+  onCancelEditGig,
 }) {
   return (
     <section id="create-gig" className="w-full rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -38,9 +40,13 @@ function SellerGigCreateView({
           </svg>
         </div>
         <div className="flex-1">
-          <h2 className="text-2xl font-semibold text-slate-900">Create a Gig</h2>
+          <h2 className="text-2xl font-semibold text-slate-900">
+            {isEditingGig ? 'Edit Gig' : 'Create a Gig'}
+          </h2>
           <p className="text-sm text-slate-500">
-            Use the same login. Complete your profile, then publish your listing.
+            {isEditingGig
+              ? 'Update your listing details and save changes.'
+              : 'Use the same login. Complete your profile, then publish your listing.'}
           </p>
         </div>
         {user?.isSeller && (
@@ -245,9 +251,21 @@ function SellerGigCreateView({
                 </div>
               )}
             </div>
-            <Button type="submit" className="w-full bg-purple-600 text-white hover:bg-purple-500">
-              Submit gig
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" className="flex-1 bg-purple-600 text-white hover:bg-purple-500">
+                {isEditingGig ? 'Save changes' : 'Submit gig'}
+              </Button>
+              {isEditingGig && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-slate-200 text-slate-700 hover:bg-slate-50"
+                  onClick={onCancelEditGig}
+                >
+                  Cancel edit
+                </Button>
+              )}
+            </div>
           </form>
 
           <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-sm text-slate-600">
