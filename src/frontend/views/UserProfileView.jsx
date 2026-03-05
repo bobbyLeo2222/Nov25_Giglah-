@@ -290,7 +290,7 @@ function UserProfileView({
   }
   const savedGigCount = favoriteGigIds.length
   const savedSellerCount = favoriteSellerIds.length
-  const buyerOrderStats = useMemo(() => summarizeBuyerOrders(buyerOrders), [buyerOrders])
+  const buyerOrderStats = summarizeBuyerOrders(buyerOrders)
   const hasSellerAccount = user?.role === 'seller'
   const resolvedWorkspace =
     profileWorkspace === 'seller'

@@ -75,10 +75,30 @@ const getOrderIdentity = (order) => String(order?._id || order?.id || '')
 const getOrderTimestamp = (order) =>
   new Date(order?.updatedAt || order?.createdAt || 0).getTime() || 0
 
+const resolveViewFromPath = (pathname = '/') => {
+  if (matchPath('/gig/:gigId', pathname)) return 'gig-detail'
+  if (pathname === '/seller-tools') return 'seller-dashboard'
+  if (pathname === '/seller/orders') return 'seller-orders'
+  if (pathname === '/orders') return 'buyer-orders'
+  if (pathname === '/seller/apply') return 'seller-apply'
+  if (matchPath('/seller/:sellerId', pathname)) return 'seller-profile'
+  if (matchPath('/chats/:threadId', pathname) || pathname === '/chats') return 'chat'
+  if (pathname === '/search') return 'search-results'
+  if (pathname === '/categories') return 'categories'
+  if (pathname === '/privacy') return 'privacy'
+  if (pathname === '/terms') return 'terms'
+  if (pathname === '/me' || pathname === '/me/seller') return 'user-profile'
+  if (pathname === '/verify-email') return 'verify-email'
+  if (pathname === '/reset-password') return 'reset-password'
+  return 'dashboard'
+}
+
 function App() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [view, setView] = useState('dashboard')
+  const [view, setView] = useState(() =>
+    resolveViewFromPath(typeof window !== 'undefined' ? window.location.pathname : '/'),
+  )
   const [forms, setForms] = useState({
     signup: { fullName: '', email: '', password: '' },
     login: { email: '', password: '' },
@@ -117,8 +137,14 @@ function App() {
   const [sellerProfiles, setSellerProfiles] = useState([])
   const [sellerReviews, setSellerReviews] = useState({})
   const [gigReviews, setGigReviews] = useState({})
-  const [selectedSellerId, setSelectedSellerId] = useState('')
-  const [selectedGigId, setSelectedGigId] = useState('')
+  const [selectedSellerId, setSelectedSellerId] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return matchPath('/seller/:sellerId', window.location.pathname)?.params?.sellerId || ''
+  })
+  const [selectedGigId, setSelectedGigId] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return matchPath('/gig/:gigId', window.location.pathname)?.params?.gigId || ''
+  })
   const [reviewDraft, setReviewDraft] = useState({ rating: 5, text: '', project: '' })
   const [currentServiceSlide, setCurrentServiceSlide] = useState(0)
   const [chatThreads, setChatThreads] = useState([])
