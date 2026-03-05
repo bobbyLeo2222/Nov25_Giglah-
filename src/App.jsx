@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import TimedAlert from '@/components/ui/TimedAlert'
 import TopBar from '@/components/ui/TopBar'
 import {
   serviceCategories,
@@ -51,7 +52,7 @@ const GIG_IMAGE_LIMIT = 10
 const GIG_VIDEO_LIMIT = 3
 const CHAT_POLL_INTERVAL_MS = 15000
 const ORDER_POLL_INTERVAL_MS = 20000
-const NOTIFICATION_TOAST_DURATION_MS = 6500
+const NOTIFICATION_TOAST_DURATION_MS = 5000
 const MAX_NOTIFICATIONS = 30
 const EMPTY_GIG_FORM = {
   title: '',
@@ -122,6 +123,7 @@ function App() {
   })
   const [message, setMessage] = useState('')
   const [reviewPrompt, setReviewPrompt] = useState(null)
+  const [reviewPromptCountdown, setReviewPromptCountdown] = useState(5)
   const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [showSignupPassword, setShowSignupPassword] = useState(false)
   const [formErrors, setFormErrors] = useState({
@@ -149,6 +151,8 @@ function App() {
   const [currentServiceSlide, setCurrentServiceSlide] = useState(0)
   const [chatThreads, setChatThreads] = useState([])
   const [unreadTotal, setUnreadTotal] = useState(0)
+  const [isStartingGigFromChat, setIsStartingGigFromChat] = useState(false)
+  const [isSendingChatMessage, setIsSendingChatMessage] = useState(false)
   const [selectedThreadId, setSelectedThreadId] = useState('')
   const [composerText, setComposerText] = useState('')
   const [composerFiles, setComposerFiles] = useState([])
@@ -169,6 +173,8 @@ function App() {
   })
   const [favoriteGigIds, setFavoriteGigIds] = useState([])
   const [favoriteSellerIds, setFavoriteSellerIds] = useState([])
+  const [savingGigStates, setSavingGigStates] = useState({})
+  const [chattingGigStates, setChattingGigStates] = useState({})
   const [inquiryDraft, setInquiryDraft] = useState({
     message: '',
   })
@@ -185,10 +191,14 @@ function App() {
   const [sellerOrders, setSellerOrders] = useState([])
   const [notifications, setNotifications] = useState([])
   const [notificationToasts, setNotificationToasts] = useState([])
+  const [toastTick, setToastTick] = useState(0)
   const [hasSyncedSellerProfile, setHasSyncedSellerProfile] = useState(false)
   const seenThreadActivityRef = useRef(new Map())
   const seenOrderActivityRef = useRef(new Map())
   const recentOrderMutationsRef = useRef(new Map())
+  const isStartingGigFromChatRef = useRef(false)
+  const isSendingChatMessageRef = useRef(false)
+  const lastChatSendSignatureRef = useRef({ signature: '', at: 0 })
   const toastTimeoutsRef = useRef([])
   const verificationEmailKey = 'giglah_pending_verification_email'
   const authedFetch = async (path, options = {}) => {
@@ -261,6 +271,14 @@ function App() {
     },
     [],
   )
+
+  useEffect(() => {
+    if (!notificationToasts.length) return undefined
+    const intervalId = window.setInterval(() => {
+      setToastTick((prev) => prev + 1)
+    }, 1000)
+    return () => window.clearInterval(intervalId)
+  }, [notificationToasts.length])
 
   const queueNotification = useCallback((payload) => {
     if (!payload?.title) return
@@ -686,6 +704,22 @@ function App() {
       setResetForm((prev) => ({ ...prev, email, token }))
     }
   }, [location.pathname, location.search])
+
+  useEffect(() => {
+    if (!reviewPrompt) return undefined
+    setReviewPromptCountdown(5)
+    const intervalId = window.setInterval(() => {
+      setReviewPromptCountdown((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(intervalId)
+          setReviewPrompt(null)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => window.clearInterval(intervalId)
+  }, [reviewPrompt])
 
   useEffect(() => {
     if (location.pathname !== '/search') return
@@ -1797,6 +1831,7 @@ function App() {
   }
 
   const handleToggleFavoriteGig = async (gig) => {
+    if (!gig?.id) return
     if (!user || !authToken) {
       setMessage('Log in to save gigs.')
       return
@@ -1806,6 +1841,7 @@ function App() {
       return
     }
     const isFav = favoriteGigIds.includes(gig.id)
+    setSavingGigStates((prev) => ({ ...prev, [gig.id]: true }))
     try {
       const endpoint = isFav ? `/api/favorites/gig/${gig.id}` : '/api/favorites'
       const options = isFav
@@ -1817,6 +1853,8 @@ function App() {
       setMessage(isFav ? 'Removed from saved gigs.' : 'Saved to your gigs.')
     } catch (error) {
       setMessage(error.message || 'Unable to update favorites.')
+    } finally {
+      setSavingGigStates((prev) => ({ ...prev, [gig.id]: false }))
     }
   }
 
@@ -1915,16 +1953,25 @@ function App() {
 
   const handleStartGigFromChat = async () => {
     if (!selectedThread) return
+    if (isStartingGigFromChatRef.current) return
+    isStartingGigFromChatRef.current = true
+    setIsStartingGigFromChat(true)
     if (!user || !authToken) {
       setMessage('Log in to start a gig.')
+      isStartingGigFromChatRef.current = false
+      setIsStartingGigFromChat(false)
       return
     }
     if (user.isSeller) {
       setMessage('Buyer mode required to start a gig.')
+      isStartingGigFromChatRef.current = false
+      setIsStartingGigFromChat(false)
       return
     }
     if (!selectedThread.gigId) {
       setMessage('This chat is not linked to a gig yet.')
+      isStartingGigFromChatRef.current = false
+      setIsStartingGigFromChat(false)
       return
     }
 
@@ -1935,12 +1982,16 @@ function App() {
         gig = normalizeGig(data?.gig || data)
       } catch (error) {
         setMessage(error.message || 'Unable to load the gig details.')
+        isStartingGigFromChatRef.current = false
+        setIsStartingGigFromChat(false)
         return
       }
     }
 
     if (!gig) {
       setMessage('Unable to locate this gig.')
+      isStartingGigFromChatRef.current = false
+      setIsStartingGigFromChat(false)
       return
     }
 
@@ -1949,10 +2000,17 @@ function App() {
     )
     if (existingOrder) {
       setMessage('An order for this gig is already in progress.')
+      isStartingGigFromChatRef.current = false
+      setIsStartingGigFromChat(false)
       return
     }
 
-    await handleCreateOrder(gig, { notes: '' })
+    try {
+      await handleCreateOrder(gig, { notes: '' })
+    } finally {
+      isStartingGigFromChatRef.current = false
+      setIsStartingGigFromChat(false)
+    }
   }
 
   const ensureThreadForGig = async (gig, { forceCreate = false } = {}) => {
@@ -2005,6 +2063,7 @@ function App() {
 
   const handleSendMessage = async (event) => {
     event.preventDefault()
+    if (isSendingChatMessageRef.current) return
     if (!selectedThread) {
       setMessage('Pick a conversation first.')
       return
@@ -2019,6 +2078,22 @@ function App() {
       setMessage('Type a message or attach a file first.')
       return
     }
+    const signature = JSON.stringify({
+      threadId: selectedThread.id,
+      text,
+      files: composerFiles.map((file) => `${file.name}|${file.size || 0}|${file.type || ''}`),
+    })
+    const now = Date.now()
+    if (
+      lastChatSendSignatureRef.current.signature === signature &&
+      now - lastChatSendSignatureRef.current.at < 3000
+    ) {
+      setMessage('Please wait before sending the same message again.')
+      return
+    }
+    lastChatSendSignatureRef.current = { signature, at: now }
+    isSendingChatMessageRef.current = true
+    setIsSendingChatMessage(true)
 
     const uploadChatFiles = async (files) =>
       Promise.all(
@@ -2181,6 +2256,9 @@ function App() {
         setSelectedGigId('')
       }
       setMessage(message)
+    } finally {
+      isSendingChatMessageRef.current = false
+      setIsSendingChatMessage(false)
     }
   }
 
@@ -2198,6 +2276,7 @@ function App() {
 
   const handleOpenChatFromGig = async (gig) => {
     if (!gig) return
+    const gigId = gig.id || gig._id || ''
     const userId = user?._id || user?.id
     const isOwner =
       (gig.owner && userId && gig.owner === userId) ||
@@ -2216,6 +2295,9 @@ function App() {
       openLoginModal()
       return
     }
+    if (gigId) {
+      setChattingGigStates((prev) => ({ ...prev, [gigId]: true }))
+    }
     try {
       const thread = await ensureThreadForGig(gig)
       setComposerText('')
@@ -2229,6 +2311,10 @@ function App() {
     } catch (error) {
       const message = error.message || 'Unable to open chat.'
       setMessage(message)
+    } finally {
+      if (gigId) {
+        setChattingGigStates((prev) => ({ ...prev, [gigId]: false }))
+      }
     }
   }
 
@@ -2242,6 +2328,7 @@ function App() {
 
   const handleSignup = async (event) => {
     event.preventDefault()
+    if (isAuthLoading) return
     const { fullName, email, password } = forms.signup
     const nameValue = fullName.trim()
     const emailValue = email.trim().toLowerCase()
@@ -3156,7 +3243,12 @@ const openSignupModal = () => {
 
       {notificationToasts.length > 0 && (
         <div className="fixed right-4 top-20 z-50 space-y-2 sm:right-6">
-          {notificationToasts.map((notification) => (
+          {notificationToasts.map((notification) => {
+            const elapsed =
+              Math.floor((Date.now() - (notification.createdAt || Date.now())) / 1000) +
+              toastTick * 0
+            const remaining = Math.max(0, 5 - elapsed)
+            return (
             <div
               key={notification.id}
               className="w-[min(92vw,360px)] rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-lg"
@@ -3172,6 +3264,7 @@ const openSignupModal = () => {
                   </p>
                   <p className="mt-1 text-sm font-semibold text-slate-900">{notification.title}</p>
                   {notification.body && <p className="mt-1 text-xs text-slate-600">{notification.body}</p>}
+                  <p className="mt-1 text-[11px] text-slate-400">Closes in {remaining}s</p>
                 </button>
                 <button
                   type="button"
@@ -3183,21 +3276,26 @@ const openSignupModal = () => {
                 </button>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        {message && (
-          <div className="rounded-2xl border border-purple-100 bg-purple-50/60 px-4 py-3 text-sm font-medium text-purple-800 shadow-sm">
-            {message}
-          </div>
-        )}
+        <TimedAlert
+          key={`app-message-${message || 'empty'}`}
+          message={message}
+          tone="info"
+          onClose={() => setMessage('')}
+        />
         {reviewPrompt && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-4 text-sm text-amber-900 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="font-semibold">
-                Order complete for {reviewPrompt.gigTitle}. Leave a review on the gig listing?
+              <div className="space-y-1">
+                <div className="font-semibold">
+                  Order complete for {reviewPrompt.gigTitle}. Leave a review on the gig listing?
+                </div>
+                <div className="text-xs opacity-80">Closes in {reviewPromptCountdown}s</div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -3231,11 +3329,12 @@ const openSignupModal = () => {
             Loading the latest marketplace data...
           </div>
         )}
-        {dataError && (
-          <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-sm">
-            {dataError}
-          </div>
-        )}
+        <TimedAlert
+          key={`app-data-error-${dataError || 'empty'}`}
+          message={dataError}
+          tone="error"
+          onClose={() => setDataError('')}
+        />
 
         {isWorkspaceView && (
           <DashboardView
@@ -3260,6 +3359,8 @@ const openSignupModal = () => {
             onOpenChat={handleOpenChatFromGig}
             onOpenGig={handleOpenGigDetail}
             favoriteGigIds={favoriteGigIds}
+            savingGigStates={savingGigStates}
+            chattingGigStates={chattingGigStates}
             onToggleFavoriteGig={handleToggleFavoriteGig}
             onGigFilterChange={handleGigFilterChange}
             onSearchSubmit={handleGigSearchSubmit}
@@ -3280,6 +3381,8 @@ const openSignupModal = () => {
             onOpenChat={handleOpenChatFromGig}
             onOpenGig={handleOpenGigDetail}
             favoriteGigIds={favoriteGigIds}
+            savingGigStates={savingGigStates}
+            chattingGigStates={chattingGigStates}
             onToggleFavoriteGig={handleToggleFavoriteGig}
             onGigFilterChange={handleGigFilterChange}
             onSearchSubmit={handleGigSearchSubmit}
@@ -3307,6 +3410,8 @@ const openSignupModal = () => {
             onSendMessage={handleSendMessage}
             onViewGig={handleViewGigFromChat}
             onStartGig={handleStartGigFromChat}
+            isStartingGig={isStartingGigFromChat}
+            isSendingMessage={isSendingChatMessage}
             pendingOrderId={pendingChatOrder?._id || pendingChatOrder?.id || ''}
             onAcceptGig={handleRequestOrderAccept}
             isOwnGig={
@@ -3574,6 +3679,8 @@ const openSignupModal = () => {
                           index={index}
                           showBuyerActions={!user?.isSeller}
                           formatter={formatter}
+                          isSavingGig={Boolean(savingGigStates[gig.id])}
+                          isOpeningChat={Boolean(chattingGigStates[gig.id])}
                           onOpenSellerProfile={handleOpenSellerProfile}
                           onOpenChat={handleOpenChatFromGig}
                           onOpenGig={handleOpenGigDetail}

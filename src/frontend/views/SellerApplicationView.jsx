@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import TimedAlert from '@/components/ui/TimedAlert'
 import { southeastAsiaCountries } from '@/data/static'
 
 function SellerApplicationView({
@@ -334,7 +335,12 @@ function SellerApplicationView({
           Submit
         </button>
       </form>
-      {sellerError && <p className="mt-4 text-sm font-semibold text-rose-600">{sellerError}</p>}
+      <TimedAlert
+        key={`seller-application-error-${sellerError || 'empty'}`}
+        message={sellerError}
+        tone="error"
+        className="mt-4"
+      />
     </section>
   )
 }

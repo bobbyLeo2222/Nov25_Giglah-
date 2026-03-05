@@ -9,6 +9,8 @@ function GigCard({
   onOpenChat,
   onOpenGig,
   isFavorited = false,
+  isSavingGig = false,
+  isOpeningChat = false,
   onToggleFavorite,
   onPreviewImage,
   showBuyerActions = true,
@@ -72,9 +74,10 @@ function GigCard({
               event.stopPropagation()
               onToggleFavorite?.()
             }}
+            disabled={isSavingGig}
             aria-label={isFavorited ? 'Unsave gig' : 'Save gig'}
           >
-            {isFavorited ? 'Saved' : 'Save'}
+            {isSavingGig ? 'Saving...' : isFavorited ? 'Saved' : 'Save'}
           </button>
         )}
       </div>
@@ -139,9 +142,14 @@ function GigCard({
                 type="button"
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-900 transition hover:border-purple-200 hover:text-purple-600"
                 onClick={() => onOpenChat?.(gig)}
+                disabled={isOpeningChat}
                 aria-label={`Chat with ${gig.seller}`}
               >
-                <ChatBubbleIcon className="h-4 w-4" />
+                {isOpeningChat ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+                ) : (
+                  <ChatBubbleIcon className="h-4 w-4" />
+                )}
               </button>
             )}
           </div>

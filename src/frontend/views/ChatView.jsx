@@ -21,6 +21,8 @@ function ChatView({
   onSendMessage,
   onViewGig,
   onStartGig,
+  isStartingGig = false,
+  isSendingMessage = false,
   pendingOrderId = '',
   onAcceptGig,
   isOwnGig = false,
@@ -194,9 +196,9 @@ function ChatView({
                       type="button"
                       className="bg-purple-600 text-white hover:bg-purple-500"
                       onClick={() => onStartGig?.()}
-                      disabled={!selectedThread?.gigId}
+                      disabled={!selectedThread?.gigId || isStartingGig}
                     >
-                      Start gig
+                      {isStartingGig ? 'Starting...' : 'Start gig'}
                     </Button>
                   )}
                 </div>
@@ -356,8 +358,12 @@ function ChatView({
                     <span>Attach</span>
                     <input type="file" multiple className="sr-only" onChange={onComposerFiles} />
                   </label>
-                  <Button type="submit" className="bg-purple-600 text-white hover:bg-purple-500">
-                    Send
+                  <Button
+                    type="submit"
+                    className="bg-purple-600 text-white hover:bg-purple-500"
+                    disabled={isSendingMessage}
+                  >
+                    {isSendingMessage ? 'Sending...' : 'Send'}
                   </Button>
                 </div>
               </form>

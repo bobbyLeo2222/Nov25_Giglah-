@@ -1,3 +1,5 @@
+import TimedAlert from '@/components/ui/TimedAlert'
+
 function LoginModal({
   forms,
   modalInputClasses,
@@ -64,7 +66,7 @@ function LoginModal({
               Continue
             </button>
           </form>
-          {formError && <p className="text-sm font-medium text-rose-500">{formError}</p>}
+          <TimedAlert key={`login-error-${formError || 'empty'}`} message={formError} tone="error" />
           <div className="flex items-center justify-between text-sm text-slate-500">
             <button type="button" className="font-semibold text-slate-700" onClick={onOpenSignup}>
               Create account

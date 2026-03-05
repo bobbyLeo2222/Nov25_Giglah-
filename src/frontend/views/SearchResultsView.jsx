@@ -13,6 +13,8 @@ function SearchResultsView({
   onClearGigFilters,
   favoriteGigIds = [],
   onToggleFavoriteGig,
+  savingGigStates = {},
+  chattingGigStates = {},
   formatter,
   onOpenSellerProfile,
   onOpenChat,
@@ -199,6 +201,8 @@ function SearchResultsView({
                 index={index}
                 showBuyerActions={!user?.isSeller}
                 isFavorited={favoriteGigIds.includes(gig.id)}
+                isSavingGig={Boolean(savingGigStates[gig.id])}
+                isOpeningChat={Boolean(chattingGigStates[gig.id])}
                 onToggleFavorite={() => onToggleFavoriteGig?.(gig)}
                 formatter={formatter}
                 onOpenSellerProfile={onOpenSellerProfile}

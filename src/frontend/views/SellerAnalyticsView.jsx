@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import TimedAlert from '@/components/ui/TimedAlert'
 
 const formatPercent = (value) => `${Math.round((value || 0) * 100)}%`
 const formatHours = (value) => (value ? `${value}h` : '—')
@@ -75,11 +76,7 @@ function SellerAnalyticsView({
             Loading seller analytics...
           </div>
         )}
-        {error && (
-          <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-sm">
-            {error}
-          </div>
-        )}
+        <TimedAlert key={`seller-analytics-error-${error || 'empty'}`} message={error} tone="error" />
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

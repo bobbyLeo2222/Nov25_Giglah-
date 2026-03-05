@@ -1,3 +1,5 @@
+import TimedAlert from '@/components/ui/TimedAlert'
+
 function SignupModal({
   forms,
   modalInputClasses,
@@ -70,12 +72,18 @@ function SignupModal({
             <button
               type="submit"
               disabled={isAuthLoading}
-              className="w-full rounded-full bg-purple-600 px-4 py-3 text-base font-semibold text-white shadow transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-purple-600 px-4 py-3 text-base font-semibold text-white shadow transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              Continue
+              {isAuthLoading && (
+                <span
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                  aria-hidden="true"
+                />
+              )}
+              {isAuthLoading ? 'Creating account...' : 'Continue'}
             </button>
           </form>
-          {formError && <p className="text-sm font-medium text-rose-500">{formError}</p>}
+          <TimedAlert key={`signup-error-${formError || 'empty'}`} message={formError} tone="error" />
           <div className="text-center text-sm text-slate-500">
             <button type="button" className="font-semibold text-slate-700" onClick={onOpenLogin}>
               Back to login

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import TimedAlert from '@/components/ui/TimedAlert'
 import RatingStars from '@/frontend/components/RatingStars'
 import { languageOptions, southeastAsiaCountries } from '@/data/static'
 import { normalizeOrderStatus, summarizeBuyerOrders } from '@/frontend/orderUtils'
@@ -599,9 +600,11 @@ function UserProfileView({
                     ))}
                   </div>
                 </div>
-                {sellerSaveMessage && (
-                  <p className="text-xs font-semibold text-slate-600">{sellerSaveMessage}</p>
-                )}
+                <TimedAlert
+                  key={`user-profile-seller-save-${sellerSaveMessage || 'empty'}`}
+                  message={sellerSaveMessage}
+                  tone="info"
+                />
               </form>
             )}
 
