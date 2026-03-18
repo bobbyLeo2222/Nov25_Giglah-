@@ -64,6 +64,14 @@ function ChatView({
         ? 'No conversations yet. Open a gig and hit Chat to reach the seller.'
         : 'No conversations yet. Start from a gig to begin messaging.'
   const selectedThreadIsBuyer = Boolean(currentUserId && selectedThread?.buyerUserId === currentUserId)
+  const shouldPromptBuyerRequirements =
+    Boolean(selectedThread) &&
+    selectedThreadIsBuyer &&
+    !isOwnGig &&
+    selectedThread.messages.length === 0
+  const composerPlaceholder = shouldPromptBuyerRequirements
+    ? 'Describe your project requirements, goals, timeline, budget, and any references...'
+    : 'Write a message...'
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -206,9 +214,19 @@ function ChatView({
 
               <div className="mt-3 flex-1 space-y-3 overflow-y-auto rounded-xl bg-slate-50 px-3 py-3">
                 {selectedThread.messages.length === 0 && (
-                  <p className="text-sm text-slate-500">
-                    Start the conversation with a quick hello or a project brief.
-                  </p>
+                  shouldPromptBuyerRequirements ? (
+                    <div className="rounded-2xl border border-purple-100 bg-white px-4 py-4 text-sm text-slate-600 shadow-sm">
+                      <p className="font-semibold text-slate-900">Send your project requirements first</p>
+                      <p className="mt-1">
+                        Start this chat by telling the seller what you need. Include scope, goals, timeline, budget,
+                        references, and any important deliverables.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      Start the conversation with a quick hello or a project brief.
+                    </p>
+                  )
                 )}
                 {selectedThread.messages.map((msg) => {
                   const currentUserId = user?._id || user?.id
@@ -347,7 +365,7 @@ function ChatView({
                 <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-sm">
                   <input
                     className="h-10 flex-1 rounded-full border-none bg-transparent px-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                    placeholder="Write a message..."
+                    placeholder={composerPlaceholder}
                     value={composerText}
                     onChange={(event) => {
                       onComposerChange?.(event.target.value)

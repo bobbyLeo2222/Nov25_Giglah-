@@ -57,8 +57,8 @@ function SellerOrdersView({
   onStartApplication,
   onOpenProfile,
 }) {
-  const [statusFilter, setStatusFilter] = useState('all')
   const isBuyerMode = mode === 'buyer'
+  const [statusFilter, setStatusFilter] = useState(() => (isBuyerMode ? 'ongoing' : 'all'))
 
   const allOrders = useMemo(() => {
     if (isBuyerMode) {
