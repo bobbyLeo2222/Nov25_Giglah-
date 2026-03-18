@@ -65,16 +65,113 @@ const EMPTY_GIG_FORM = {
 const getComparableUserId = (participant) =>
   participant?._id?.toString?.() || participant?.id?.toString?.() || participant?.toString?.() || ''
 
-const toOrderStatusLabel = (status = '') => {
-  const normalized = String(status || 'pending').replace(/_/g, ' ').trim()
-  if (!normalized) return 'Pending'
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
-}
-
 const getOrderIdentity = (order) => String(order?._id || order?.id || '')
 
 const getOrderTimestamp = (order) =>
   new Date(order?.updatedAt || order?.createdAt || 0).getTime() || 0
+
+const getOrderActivitySnapshot = (order) => ({
+  status: String(order?.status || 'pending').toLowerCase(),
+  updatedAt: getOrderTimestamp(order),
+  buyerCompletedAt: order?.buyerCompletedAt ? new Date(order.buyerCompletedAt).getTime() || 0 : 0,
+  sellerCompletedAt: order?.sellerCompletedAt ? new Date(order.sellerCompletedAt).getTime() || 0 : 0,
+  cancelledAt: order?.cancelledAt ? new Date(order.cancelledAt).getTime() || 0 : 0,
+  cancelledBy: String(order?.cancelledBy || '').toLowerCase(),
+})
+
+const getOrderEventKey = (previous, next) => {
+  if (!previous) return 'new'
+  if (next.cancelledAt && next.cancelledAt !== previous.cancelledAt) return 'cancelled'
+  if (previous.status !== 'in_progress' && next.status === 'in_progress') return 'accepted'
+  if (previous.status !== 'complete' && next.status === 'complete') return 'completed'
+  if (next.sellerCompletedAt && next.sellerCompletedAt !== previous.sellerCompletedAt) {
+    return 'seller_marked_complete'
+  }
+  if (next.buyerCompletedAt && next.buyerCompletedAt !== previous.buyerCompletedAt) {
+    return 'buyer_marked_complete'
+  }
+  if (previous.status !== next.status) return `status:${next.status}`
+  return ''
+}
+
+const getOrderNotificationContent = ({ order, eventKey, isBuyer, isSeller }) => {
+  const gigTitle = order?.gigTitle || 'Your order'
+  const action = { kind: isSeller ? 'seller-orders' : 'buyer-orders' }
+
+  switch (eventKey) {
+    case 'new':
+      if (!isSeller) return null
+      return {
+        title: 'New order received',
+        body: `${gigTitle} has been ordered by a buyer.`,
+        action,
+      }
+    case 'accepted':
+      return isSeller
+        ? {
+            title: 'Order Accepted',
+            body: `${gigTitle} • Buyer has been notified.`,
+            action,
+          }
+        : {
+            title: 'Order Accepted',
+            body: `${gigTitle} • Seller accepted your order.`,
+            action,
+          }
+    case 'cancelled': {
+      const cancelledBy = String(order?.cancelledBy || '').toLowerCase()
+      return isSeller
+        ? {
+            title: 'Order Cancelled',
+            body:
+              cancelledBy === 'buyer'
+                ? `${gigTitle} • Buyer cancelled this order.`
+                : `${gigTitle} • Both sides have been notified.`,
+            action,
+          }
+        : {
+            title: 'Order Cancelled',
+            body:
+              cancelledBy === 'seller'
+                ? `${gigTitle} • Seller cancelled this order.`
+                : `${gigTitle} • Both sides have been notified.`,
+            action,
+          }
+    }
+    case 'seller_marked_complete':
+      return isSeller
+        ? {
+            title: 'Completion Recorded',
+            body: `${gigTitle} • Buyer has been notified.`,
+            action,
+          }
+        : {
+            title: 'Completion Update',
+            body: `${gigTitle} • Seller marked this order as complete. Your confirmation is still required.`,
+            action,
+          }
+    case 'buyer_marked_complete':
+      return isBuyer
+        ? {
+            title: 'Completion Recorded',
+            body: `${gigTitle} • Seller has been notified.`,
+            action,
+          }
+        : {
+            title: 'Completion Update',
+            body: `${gigTitle} • Buyer marked this order as complete. Your confirmation is still required.`,
+            action,
+          }
+    case 'completed':
+      return {
+        title: 'Order Completed',
+        body: `${gigTitle} • This order is now marked as completed.`,
+        action,
+      }
+    default:
+      return null
+  }
+}
 
 const resolveViewFromPath = (pathname = '/') => {
   if (matchPath('/gig/:gigId', pathname)) return 'gig-detail'
@@ -952,9 +1049,8 @@ function App() {
 
       const nextActivity = new Map()
       mergedById.forEach((order, orderId) => {
-        const status = String(order?.status || 'pending').toLowerCase()
-        const updatedAt = getOrderTimestamp(order)
-        nextActivity.set(orderId, { status, updatedAt })
+        const nextSnapshot = getOrderActivitySnapshot(order)
+        nextActivity.set(orderId, nextSnapshot)
 
         if (!announceUpdates) return
         const previous = previousActivity.get(orderId)
@@ -965,37 +1061,26 @@ function App() {
 
         if (!isBuyer && !isSeller) return
 
-        if (!previous) {
-          if (!isSeller) return
-          queueNotification({
-            type: 'order',
-            title: 'New order received',
-            body: `${order?.gigTitle || 'A gig'} has a new order request.`,
-            action: { kind: 'seller-orders' },
-            dedupeKey: `order:new:${orderId}`,
-          })
-          return
-        }
-
-        if (previous.status === status) return
+        const eventKey = getOrderEventKey(previous, nextSnapshot)
+        if (!eventKey) return
         const recentMutation = recentOrderMutationsRef.current.get(orderId)
         if (recentMutation) {
           const mutationAgeMs = Date.now() - (recentMutation.at || 0)
           if (mutationAgeMs > 60000) {
             recentOrderMutationsRef.current.delete(orderId)
-          } else if (recentMutation.status === status) {
+          } else if (recentMutation.eventKey === eventKey) {
             recentOrderMutationsRef.current.delete(orderId)
             return
           }
         }
-        const statusLabel = toOrderStatusLabel(status)
-        const perspective = isSeller ? 'Buyer workflow updated.' : 'Seller workflow updated.'
+        const notification = getOrderNotificationContent({ order, eventKey, isBuyer, isSeller })
+        if (!notification) return
         queueNotification({
           type: 'order',
-          title: `Order ${statusLabel}`,
-          body: `${order?.gigTitle || 'Your order'} • ${perspective}`,
-          action: { kind: isSeller ? 'seller-orders' : 'buyer-orders' },
-          dedupeKey: `order:status:${orderId}:${status}:${updatedAt}`,
+          title: notification.title,
+          body: notification.body,
+          action: notification.action,
+          dedupeKey: `order:${eventKey}:${orderId}:${nextSnapshot.updatedAt}`,
         })
       })
 
@@ -1849,6 +1934,7 @@ function App() {
         const orderSellerId = data.order.sellerId || ''
         const orderComplete = data.order.status === 'complete'
         const isBuyer = data.order.buyer?.toString?.() === userId || data.order.buyer === userId
+        const isSeller = data.order.seller?.toString?.() === userId || data.order.seller === userId
         const matchesOrder = (order) =>
           String(order?._id || order?.id || '') === String(orderId)
         setBuyerOrders((prev) =>
@@ -1863,9 +1949,51 @@ function App() {
         )
         const updatedOrderId = getOrderIdentity(data.order)
         if (updatedOrderId) {
+          let eventKey = `status:${String(data.order.status || status || 'pending').toLowerCase()}`
+          if (status === 'in_progress') {
+            eventKey = 'accepted'
+          } else if (status === 'cancelled') {
+            eventKey = 'cancelled'
+          } else if (status === 'complete') {
+            if (data.order.status === 'complete') {
+              eventKey = 'completed'
+            } else if (isBuyer) {
+              eventKey = 'buyer_marked_complete'
+            } else if (isSeller) {
+              eventKey = 'seller_marked_complete'
+            }
+          }
           recentOrderMutationsRef.current.set(updatedOrderId, {
-            status: String(data.order.status || status || 'pending').toLowerCase(),
+            eventKey,
             at: Date.now(),
+          })
+        }
+        if (status === 'in_progress') {
+          queueNotification({
+            type: 'order',
+            title: 'Order Accepted',
+            body: `${data.order.gigTitle || 'Your order'} • Buyer has been notified.`,
+            action: { kind: 'seller-orders' },
+            dedupeKey: `order:self:accepted:${updatedOrderId}`,
+          })
+        } else if (status === 'cancelled') {
+          queueNotification({
+            type: 'order',
+            title: 'Order Cancelled',
+            body: `${data.order.gigTitle || 'Your order'} • Both sides have been notified.`,
+            action: { kind: isSeller ? 'seller-orders' : 'buyer-orders' },
+            dedupeKey: `order:self:cancelled:${updatedOrderId}`,
+          })
+        } else if (status === 'complete') {
+          queueNotification({
+            type: 'order',
+            title: data.order.status === 'complete' ? 'Order Completed' : 'Completion Recorded',
+            body:
+              data.order.status === 'complete'
+                ? `${data.order.gigTitle || 'Your order'} • Both sides have been notified that the order is completed.`
+                : `${data.order.gigTitle || 'Your order'} • Both sides have been notified.`,
+            action: { kind: isSeller ? 'seller-orders' : 'buyer-orders' },
+            dedupeKey: `order:self:${data.order.status === 'complete' ? 'completed' : 'completion-recorded'}:${updatedOrderId}`,
           })
         }
         setMessage(
@@ -2019,6 +2147,13 @@ function App() {
       })
       if (data?.order) {
         setBuyerOrders((prev) => [data.order, ...prev])
+        queueNotification({
+          type: 'order',
+          title: 'Order Placed',
+          body: `${gig.title || 'Your order'} • Seller has been notified.`,
+          action: { kind: 'buyer-orders' },
+          dedupeKey: `order:placed:${getOrderIdentity(data.order)}`,
+        })
         setMessage('Order created. The seller will be notified.')
       }
     } catch (error) {
