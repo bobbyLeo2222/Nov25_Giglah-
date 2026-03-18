@@ -1,6 +1,9 @@
-const ongoingOrderStatuses = new Set(['pending', 'in_progress', 'delivered'])
+const ongoingOrderStatuses = new Set(['pending', 'in_progress', 'awaiting_completion'])
 
-export const normalizeOrderStatus = (status) => (status || 'pending').toLowerCase()
+export const normalizeOrderStatus = (status) => {
+  const normalized = (status || 'pending').toLowerCase()
+  return normalized === 'delivered' ? 'awaiting_completion' : normalized
+}
 
 export const isOngoingOrderStatus = (status) => ongoingOrderStatuses.has(normalizeOrderStatus(status))
 

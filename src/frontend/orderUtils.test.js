@@ -19,7 +19,7 @@ describe('orderUtils', () => {
       { id: '2', status: 'in_progress', price: '250' },
       { id: '3', status: 'complete', price: 90 },
       { id: '4', status: 'cancelled', price: 400 },
-      { id: '5', status: 'delivered', price: 0 },
+      { id: '5', status: 'awaiting_completion', price: 0 },
       { id: '6', status: null, price: 35 },
     ]
 
@@ -36,7 +36,7 @@ describe('orderUtils', () => {
     const orders = [
       { id: 'pending', status: 'pending' },
       { id: 'progress', status: 'in_progress' },
-      { id: 'delivered', status: 'delivered' },
+      { id: 'awaiting', status: 'awaiting_completion' },
       { id: 'complete', status: 'complete' },
       { id: 'cancelled', status: 'cancelled' },
     ]
@@ -44,14 +44,14 @@ describe('orderUtils', () => {
     expect(filterOrdersByStatus(orders, 'ongoing').map((order) => order.id)).toEqual([
       'pending',
       'progress',
-      'delivered',
+      'awaiting',
     ])
     expect(filterOrdersByStatus(orders, 'complete').map((order) => order.id)).toEqual(['complete'])
     expect(filterOrdersByStatus(orders, 'cancelled').map((order) => order.id)).toEqual(['cancelled'])
     expect(filterOrdersByStatus(orders, 'all').map((order) => order.id)).toEqual([
       'pending',
       'progress',
-      'delivered',
+      'awaiting',
       'complete',
       'cancelled',
     ])

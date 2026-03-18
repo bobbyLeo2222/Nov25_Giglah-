@@ -2,9 +2,12 @@ import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import SellerGigCreateView from '@/frontend/views/SellerGigCreateView.jsx'
 
-const ongoingStatuses = new Set(['pending', 'in_progress', 'delivered'])
+const ongoingStatuses = new Set(['pending', 'in_progress', 'awaiting_completion'])
 const getOrderId = (order) => order?._id || order?.id || ''
-const normalizeStatus = (status) => (status || 'pending').toLowerCase()
+const normalizeStatus = (status) => {
+  const normalized = (status || 'pending').toLowerCase()
+  return normalized === 'delivered' ? 'awaiting_completion' : normalized
+}
 
 function SellerDashboardView({
   user,
@@ -168,12 +171,12 @@ function SellerDashboardView({
                 <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4">
                   <p className="text-xs font-semibold text-slate-500">Ongoing orders</p>
                   <p className="mt-2 text-3xl font-semibold text-slate-900">{ongoingOrders.length}</p>
-                  <p className="text-xs text-slate-500">Pending, in progress, or delivered</p>
+                  <p className="text-xs text-slate-500">Awaiting confirmation, in progress, or awaiting completion</p>
                 </div>
                 <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4">
                   <p className="text-xs font-semibold text-slate-500">Completed</p>
                   <p className="mt-2 text-3xl font-semibold text-slate-900">{completedOrders.length}</p>
-                  <p className="text-xs text-slate-500">Delivered successfully</p>
+                  <p className="text-xs text-slate-500">Fully completed orders</p>
                 </div>
                 <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4">
                   <p className="text-xs font-semibold text-slate-500">Avg order value</p>

@@ -11,18 +11,32 @@ import {
 const statusStyles = {
   pending: 'bg-amber-50 text-amber-700 border-amber-100',
   in_progress: 'bg-sky-50 text-sky-700 border-sky-100',
-  delivered: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+  awaiting_completion: 'bg-indigo-50 text-indigo-700 border-indigo-100',
   complete: 'bg-emerald-50 text-emerald-700 border-emerald-100',
   cancelled: 'bg-rose-50 text-rose-700 border-rose-100',
 }
 
-const formatStatus = (status) => (status || 'pending').replace(/_/g, ' ')
+const formatStatus = (status) => {
+  const normalized = status || 'pending'
+  if (normalized === 'pending') return 'awaiting confirmation'
+  return normalized.replace(/_/g, ' ')
+}
 const getOrderId = (order) => order?._id || order?.id || ''
 const getComparableId = (value) => {
   if (!value) return ''
   if (typeof value === 'string') return value
   if (typeof value === 'object') return value._id?.toString?.() || value.id?.toString?.() || ''
   return String(value)
+}
+
+const getCompletionRequesterRole = (order) => {
+  const explicit = String(order?.completionRequestedBy || '').toLowerCase()
+  if (explicit) return explicit
+  const buyerCompleted = Boolean(order?.buyerCompletedAt)
+  const sellerCompleted = Boolean(order?.sellerCompletedAt)
+  if (buyerCompleted && !sellerCompleted) return 'buyer'
+  if (sellerCompleted && !buyerCompleted) return 'seller'
+  return ''
 }
 
 function SellerOrdersView({
@@ -37,6 +51,7 @@ function SellerOrdersView({
   onRequestOrderAccept,
   onRequestOrderCancel,
   onRequestOrderComplete,
+  onRequestOrderRejectCompletion,
   onOpenLogin,
   onOpenSignup,
   onStartApplication,
@@ -66,7 +81,7 @@ function SellerOrdersView({
           <p className="text-lg font-semibold text-slate-900">Sign in to access orders</p>
           <p className="text-sm text-slate-600">
             {isBuyerMode
-              ? 'Track your order progress, delivery updates, and completion confirmations.'
+              ? 'Track your order progress, completion requests, and final confirmations.'
               : 'Track incoming and outgoing seller orders once you are signed in.'}
           </p>
           <div className="flex flex-wrap gap-2">
@@ -152,7 +167,7 @@ function SellerOrdersView({
           </h2>
           <p className="mt-2 text-sm text-slate-600">
             {isBuyerMode
-              ? 'Track order progress, confirm completion, and message sellers quickly.'
+              ? 'Track progress, request completion, and respond to seller confirmations.'
               : 'Track status across all incoming and outgoing orders.'}
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-4">
@@ -233,16 +248,19 @@ function SellerOrdersView({
           {visibleOrders.map((order) => {
             const orderId = getOrderId(order)
             const orderStatus = normalizeOrderStatus(order.status)
-            const buyerCompleted = Boolean(order.buyerCompletedAt)
-            const sellerCompleted = Boolean(order.sellerCompletedAt)
             const userId = String(user._id || user.id || '')
             const isBuyer = getComparableId(order.buyer) === userId
             const isSeller = getComparableId(order.seller) === userId
-            const yourCompleted = isBuyer ? buyerCompleted : isSeller ? sellerCompleted : false
-            const otherCompleted = isBuyer ? sellerCompleted : buyerCompleted
-            const awaitingOther = (isBuyer || isSeller) && (buyerCompleted || sellerCompleted) && !otherCompleted
-            const canMarkComplete = (isBuyer || isSeller) && !yourCompleted && orderStatus !== 'complete' && orderStatus !== 'cancelled'
+            const requesterRole = getCompletionRequesterRole(order)
+            const userRole = isBuyer ? 'buyer' : isSeller ? 'seller' : ''
+            const otherRole = userRole === 'buyer' ? 'seller' : userRole === 'seller' ? 'buyer' : ''
+            const isRequester = Boolean(userRole && requesterRole === userRole)
+            const isResponder = orderStatus === 'awaiting_completion' && Boolean(userRole && requesterRole && requesterRole !== userRole)
+            const canRequestCompletion = (isBuyer || isSeller) && orderStatus === 'in_progress'
+            const canConfirmCompletion = isResponder
+            const canRejectCompletion = isResponder
             const canAcceptOrder = !isBuyerMode && order.flow === 'incoming' && orderStatus === 'pending' && isSeller
+            const canCancelOrder = (isBuyer || isSeller) && orderStatus !== 'complete' && orderStatus !== 'cancelled'
             const messageLabel = isBuyerMode
               ? 'Message seller'
               : order.flow === 'incoming'
@@ -250,13 +268,19 @@ function SellerOrdersView({
                 : 'Message seller'
             const orderFlowLabel = isBuyerMode ? 'Purchase' : order.flow === 'incoming' ? 'Incoming' : 'Outgoing'
             const sellerName = order.sellerName || sellerNameById[order.sellerId] || order.sellerId || 'Seller'
-            const completionActionLabel = yourCompleted
-              ? 'Completion recorded'
-              : isBuyerMode
-                ? 'Confirm completion'
-                : 'Mark complete'
-            const canCancelOrder =
-              (isBuyer || isSeller) && orderStatus !== 'complete' && orderStatus !== 'cancelled'
+            const completionActionLabel = orderStatus === 'awaiting_completion' ? 'Confirm completion' : 'Request completion'
+            const completionStatusLabel =
+              orderStatus === 'pending'
+                ? 'Awaiting seller confirmation'
+                : orderStatus === 'awaiting_completion'
+                ? requesterRole
+                  ? `Awaiting ${requesterRole === 'buyer' ? 'seller' : 'buyer'} confirmation`
+                  : 'Awaiting confirmation'
+                : orderStatus === 'complete'
+                  ? 'Order completed'
+                  : orderStatus === 'cancelled'
+                    ? 'Order cancelled'
+                    : 'Work in progress'
 
             return (
               <div key={orderId} className="rounded-[28px] border border-slate-100 bg-white px-4 py-4 shadow-sm sm:px-7 sm:py-6">
@@ -297,20 +321,21 @@ function SellerOrdersView({
                 )}
 
                 {orderStatus !== 'cancelled' && (
-                  <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                      Your confirmation: {yourCompleted ? 'Done' : 'Pending'}
+                  <div className="mt-3 space-y-2">
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      {completionStatusLabel}
                     </div>
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                      Other party: {otherCompleted ? 'Done' : 'Pending'}
-                    </div>
+                    {orderStatus === 'awaiting_completion' && requesterRole && (
+                      <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+                        Completion was requested by the {requesterRole}. {isRequester ? 'Waiting for the other party to respond.' : `You can confirm or reject and return the order to ${otherRole ? otherRole.replace('_', ' ') : 'progress'}.`}
+                      </div>
+                    )}
+                    {orderStatus === 'in_progress' && order.completionRejectedAt && (
+                      <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        The last completion request was rejected{order.completionRejectedBy ? ` by the ${order.completionRejectedBy}` : ''}. The order is back in progress.
+                      </div>
+                    )}
                   </div>
-                )}
-
-                {awaitingOther && orderStatus !== 'complete' && orderStatus !== 'cancelled' && (
-                  <p className="mt-2 text-xs font-semibold text-amber-700">
-                    Awaiting other party confirmation.
-                  </p>
                 )}
 
                 <div className="mt-5 flex flex-wrap gap-2">
@@ -345,28 +370,45 @@ function SellerOrdersView({
                       Accept order
                     </Button>
                   )}
-                  {orderStatus !== 'complete' && orderStatus !== 'cancelled' && (
-                    <>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                        onClick={() => onRequestOrderComplete?.(orderId)}
-                        disabled={!canMarkComplete}
-                      >
-                        {completionActionLabel}
-                      </Button>
-                      {canCancelOrder && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="border-rose-200 text-rose-700 hover:bg-rose-50"
-                          onClick={() => onRequestOrderCancel?.(orderId)}
-                        >
-                          {isBuyerMode ? 'Cancel order' : 'Cancel with reason'}
-                        </Button>
-                      )}
-                    </>
+                  {canRequestCompletion && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => onRequestOrderComplete?.(orderId)}
+                    >
+                      {completionActionLabel}
+                    </Button>
+                  )}
+                  {canConfirmCompletion && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => onRequestOrderComplete?.(orderId)}
+                    >
+                      Confirm completion
+                    </Button>
+                  )}
+                  {canRejectCompletion && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                      onClick={() => onRequestOrderRejectCompletion?.(orderId)}
+                    >
+                      Reject completion
+                    </Button>
+                  )}
+                  {canCancelOrder && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-rose-200 text-rose-700 hover:bg-rose-50"
+                      onClick={() => onRequestOrderCancel?.(orderId)}
+                    >
+                      {isBuyerMode ? 'Cancel order' : 'Cancel with reason'}
+                    </Button>
                   )}
                 </div>
               </div>

@@ -52,7 +52,7 @@ export const addReview = asyncHandler(async (req, res) => {
     buyer: req.user.id,
     seller: gig.seller,
     gigId: gig._id.toString(),
-    status: { $in: ['delivered', 'complete'] },
+    status: 'complete',
   }).sort({ updatedAt: -1 })
 
   if (!qualifyingOrder) {
