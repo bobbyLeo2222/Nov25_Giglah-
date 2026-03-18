@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Button } from './button'
 import logo from '@/images/Logo_Words.png'
 
@@ -31,6 +31,9 @@ function TopBar({
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+  const desktopAccountMenuRef = useRef(null)
+  const desktopNotificationsRef = useRef(null)
+  const mobileMenuRef = useRef(null)
   const initials = user?.name
     ? user.name
         .split(' ')
@@ -96,6 +99,41 @@ function TopBar({
     }).format(timestamp)
   }
 
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      const target = event.target
+
+      if (
+        isAccountMenuOpen &&
+        desktopAccountMenuRef.current &&
+        !desktopAccountMenuRef.current.contains(target)
+      ) {
+        setIsAccountMenuOpen(false)
+      }
+
+      if (
+        isNotificationsOpen &&
+        desktopNotificationsRef.current &&
+        !desktopNotificationsRef.current.contains(target)
+      ) {
+        setIsNotificationsOpen(false)
+      }
+
+      if (isMenuOpen && mobileMenuRef.current && !mobileMenuRef.current.contains(target)) {
+        setIsMenuOpen(false)
+        setIsAccountMenuOpen(false)
+        setIsNotificationsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
+    }
+  }, [isAccountMenuOpen, isMenuOpen, isNotificationsOpen])
+
 
   return (
     <header className="w-full border-b border-slate-200 bg-white">
@@ -128,7 +166,7 @@ function TopBar({
                   Become a Seller
                 </button>
               )}
-              <div className="relative">
+              <div className="relative" ref={desktopNotificationsRef}>
                 <button
                   type="button"
                   className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-700 transition hover:border-purple-200 hover:text-purple-700"
@@ -218,7 +256,7 @@ function TopBar({
                 )}
               </div>
               {user.isSeller ? (
-                <div className="relative">
+                <div className="relative" ref={desktopAccountMenuRef}>
                   <button
                     type="button"
                     className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1.5 text-slate-700 transition hover:border-purple-200 hover:text-purple-700"
@@ -271,7 +309,7 @@ function TopBar({
                   )}
                 </div>
               ) : (
-                <div className="relative">
+                <div className="relative" ref={desktopAccountMenuRef}>
                   <button
                     type="button"
                     className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1.5 text-slate-700 transition hover:border-purple-200 hover:text-purple-700"
@@ -371,7 +409,10 @@ function TopBar({
               ☰
             </button>
             {isMenuOpen && (
-              <div className="mt-3 w-full space-y-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-800 shadow-sm sm:hidden">
+              <div
+                ref={mobileMenuRef}
+                className="mt-3 w-full space-y-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-800 shadow-sm sm:hidden"
+              >
                 <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
                   <div className="flex items-center gap-3">
                     {profileImage ? (
