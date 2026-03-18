@@ -79,6 +79,6 @@ app.listen(PORT, '0.0.0.0', async () => {
   try {
     await connectDB()
   } catch (error) {
-    console.error('Starting API without database connection')
+    console.error('Starting API without database connection') //if facing issue with db connection, start server anyway
   }
 })
