@@ -3535,42 +3535,6 @@ const openSignupModal = () => {
           tone="info"
           onClose={() => setMessage('')}
         />
-        {reviewPrompt && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-4 text-sm text-amber-900 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="space-y-1">
-                <div className="font-semibold">
-                  Order complete for {reviewPrompt.gigTitle}. Leave a review on the gig listing?
-                </div>
-                <div className="text-xs opacity-80">Closes in {reviewPromptCountdown}s</div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  className="bg-purple-600 text-white hover:bg-purple-500"
-                  onClick={() => {
-                    if (reviewPrompt.gigId) {
-                      navigate(`/gig/${reviewPrompt.gigId}`)
-                    } else if (reviewPrompt.sellerId) {
-                      handleOpenSellerProfile(reviewPrompt.sellerId)
-                    }
-                    setReviewPrompt(null)
-                  }}
-                >
-                  Leave review
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-amber-300 text-amber-900 hover:bg-amber-100"
-                  onClick={() => setReviewPrompt(null)}
-                >
-                  Later
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
         {showLoadingBanner && (
           <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600 shadow-sm">
             Loading the latest marketplace data...
@@ -4155,6 +4119,44 @@ const openSignupModal = () => {
           showPassword={showSignupPassword}
           onTogglePassword={() => setShowSignupPassword((prev) => !prev)}
         />
+      )}
+      {reviewPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 px-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-3xl border border-amber-200 bg-white p-6 shadow-2xl">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Order Completed</p>
+              <h3 className="text-xl font-semibold text-slate-900">Leave a review for {reviewPrompt.gigTitle}</h3>
+              <p className="text-sm text-slate-600">
+                Both sides have marked this order as completed. Share a rating and quick note on the gig listing.
+              </p>
+              <p className="text-xs text-slate-400">Closes in {reviewPromptCountdown}s</p>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                className="bg-purple-600 text-white hover:bg-purple-500"
+                onClick={() => {
+                  if (reviewPrompt.gigId) {
+                    navigate(`/gig/${reviewPrompt.gigId}#leave-review`)
+                  } else if (reviewPrompt.sellerId) {
+                    handleOpenSellerProfile(reviewPrompt.sellerId)
+                  }
+                  setReviewPrompt(null)
+                }}
+              >
+                Leave review
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-slate-200 text-slate-700 hover:bg-slate-50"
+                onClick={() => setReviewPrompt(null)}
+              >
+                Later
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

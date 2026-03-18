@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import RatingStars from '@/frontend/components/RatingStars'
 
@@ -65,6 +65,7 @@ function GigDetailView({
   )
   const [previewImage, setPreviewImage] = useState('')
   const [selectedMediaUrl, setSelectedMediaUrl] = useState('')
+  const reviewSectionRef = useRef(null)
   const currentMedia = normalizedMedia.find((item) => item.url === selectedMediaUrl) || normalizedMedia[0] || null
   const activeImage = currentMedia && currentMedia.type !== 'video' ? currentMedia.url : ''
   const activeVideo = currentMedia?.type === 'video' ? currentMedia : null
@@ -78,6 +79,13 @@ function GigDetailView({
       openPreview(url)
     }
   }
+
+  useEffect(() => {
+    if (!canLeaveReview) return
+    if (typeof window === 'undefined') return
+    if (window.location.hash !== '#leave-review') return
+    reviewSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [canLeaveReview, gig?.id])
 
   if (!gig) {
     return (
@@ -399,6 +407,8 @@ function GigDetailView({
           {!user?.isSeller && (
             canLeaveReview ? (
               <form
+                id="leave-review"
+                ref={reviewSectionRef}
                 className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 shadow-sm"
                 onSubmit={onSubmitReview}
               >
