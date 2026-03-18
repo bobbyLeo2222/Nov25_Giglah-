@@ -8,6 +8,7 @@ import {
   requestPasswordReset,
   resendVerification,
   resetPassword,
+  updateMe,
   verifyEmail,
 } from '../controllers/authController.js'
 import { authRequired, refreshAuth } from '../middleware/auth.js'
@@ -18,6 +19,7 @@ const router = Router()
 router.post('/register', asyncHandler(register))
 router.post('/login', asyncHandler(login))
 router.get('/me', authRequired, asyncHandler(me))
+router.put('/me', authRequired, asyncHandler(updateMe))
 router.post('/refresh', refreshAuth, asyncHandler(refreshSession))
 router.post('/logout', asyncHandler(logout))
 router.post('/forgot-password', asyncHandler(requestPasswordReset))

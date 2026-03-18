@@ -19,6 +19,7 @@ function SearchResultsView({
   onOpenSellerProfile,
   onOpenChat,
   onOpenGig,
+  onSearchChange,
   onSearchSubmit,
 }) {
   const categoryItems = serviceCategories.flatMap((group) => group.items)
@@ -42,6 +43,14 @@ function SearchResultsView({
   useEffect(() => {
     setSearchInput(gigFilters.search || '')
   }, [gigFilters.search])
+
+  useEffect(() => {
+    if (searchInput === (gigFilters.search || '')) return undefined
+    const timeoutId = window.setTimeout(() => {
+      onSearchChange?.(searchInput)
+    }, 300)
+    return () => window.clearTimeout(timeoutId)
+  }, [gigFilters.search, onSearchChange, searchInput])
 
   return (
     <>

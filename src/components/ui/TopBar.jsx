@@ -59,6 +59,11 @@ function TopBar({
     { id: 'dashboard', label: 'Dashboard', action: onSellerDashboard },
     { id: 'profile', label: 'Profile', action: onSellerProfile },
     {
+      id: 'chats',
+      label: unreadMessageCount > 0 ? `Chats (${unreadMessageCount})` : 'Chats',
+      action: onChat,
+    },
+    {
       id: 'orders',
       label: unreadOrderCount > 0 ? `Orders (${unreadOrderCount})` : 'Orders',
       action: onSellerOrders,
@@ -66,6 +71,11 @@ function TopBar({
   ]
   const buyerMenuItems = [
     { id: 'profile', label: 'Profile', action: onProfile },
+    {
+      id: 'buyer-chats',
+      label: unreadMessageCount > 0 ? `Chats (${unreadMessageCount})` : 'Chats',
+      action: onChat,
+    },
     {
       id: 'buyer-orders',
       label: unreadOrderCount > 0 ? `Orders (${unreadOrderCount})` : 'Orders',

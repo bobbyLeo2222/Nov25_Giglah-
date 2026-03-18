@@ -5,6 +5,7 @@ import morgan from 'morgan'
 import fs from 'node:fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import mongoose from 'mongoose'
 import connectDB from './config/db.js'
 import authRoutes from './routes/authRoutes.js'
 import profileRoutes from './routes/profileRoutes.js'
@@ -34,7 +35,13 @@ app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(morgan('dev'))
 
-app.get('/health', (req, res) => res.json({ status: 'ok' }))
+app.get('/health', (req, res) => {
+  const isDbConnected = mongoose.connection.readyState === 1
+  res.status(isDbConnected ? 200 : 503).json({
+    status: isDbConnected ? 'ok' : 'degraded',
+    database: isDbConnected ? 'connected' : 'disconnected',
+  })
+})
 
 app.use('/api/auth', authRoutes)
 app.use('/api/profiles', profileRoutes)
@@ -67,13 +74,11 @@ app.use((err, req, res, next) => {
   res.status(status).json({ message: err.message || 'Server error' })
 })
 
-connectDB()
-  .then(() => {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`API running on port ${PORT}`)
-    })
-  })
-  .catch((error) => {
-    console.error('Failed to start server', error)
-    process.exit(1)
-  })
+app.listen(PORT, '0.0.0.0', async () => {
+  console.log(`API running on port ${PORT}`)
+  try {
+    await connectDB()
+  } catch (error) {
+    console.error('Starting API without database connection')
+  }
+})

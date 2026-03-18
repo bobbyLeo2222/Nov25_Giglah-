@@ -27,12 +27,21 @@ function UserProfileView({
   onOpenBuyerOrders,
   onRefreshSellerProfile,
   onUpdateSellerProfile,
+  onUpdateBuyerProfile,
   onOpenGigFromSaved,
   onOpenSellerProfile,
   onBuyerBriefChange,
   onSubmitBuyerBrief,
   profileWorkspace = 'auto',
 }) {
+  const [isEditingBuyer, setIsEditingBuyer] = useState(false)
+  const [buyerForm, setBuyerForm] = useState({
+    name: '',
+    profilePicture: null,
+    profilePictureUrl: '',
+  })
+  const [isSavingBuyer, setIsSavingBuyer] = useState(false)
+  const [buyerSaveMessage, setBuyerSaveMessage] = useState('')
   const [isEditingSeller, setIsEditingSeller] = useState(false)
   const [sellerForm, setSellerForm] = useState({
     fullName: '',
@@ -55,6 +64,14 @@ function UserProfileView({
   const [isSavingSeller, setIsSavingSeller] = useState(false)
   const [sellerSaveMessage, setSellerSaveMessage] = useState('')
   const [isLoadingSellerProfile, setIsLoadingSellerProfile] = useState(false)
+
+  const fillBuyerForm = (sourceProfile, sourceUser) => {
+    setBuyerForm({
+      name: sourceUser?.name || sourceProfile?.name || '',
+      profilePicture: null,
+      profilePictureUrl: sourceUser?.avatarUrl || sourceProfile?.avatar || '',
+    })
+  }
 
   const fillSellerForm = (source) => {
     if (!source) return
@@ -109,10 +126,28 @@ function UserProfileView({
   }
 
   useEffect(() => {
+    if (!isEditingBuyer) {
+      fillBuyerForm(profile, user)
+    }
+  }, [profile, user, isEditingBuyer])
+
+  useEffect(() => {
     if (!isEditingSeller) {
       fillSellerForm(profile)
     }
   }, [profile, user, isEditingSeller])
+
+  const selectedBuyerPicturePreviewUrl = useMemo(() => {
+    if (!buyerForm.profilePicture) return ''
+    return URL.createObjectURL(buyerForm.profilePicture)
+  }, [buyerForm.profilePicture])
+
+  useEffect(
+    () => () => {
+      if (selectedBuyerPicturePreviewUrl) URL.revokeObjectURL(selectedBuyerPicturePreviewUrl)
+    },
+    [selectedBuyerPicturePreviewUrl],
+  )
 
   const selectedPicturePreviewUrl = useMemo(() => {
     if (!sellerForm.profilePicture) return ''
@@ -142,6 +177,45 @@ function UserProfileView({
   const handleSellerPictureChange = (event) => {
     const file = event.target.files?.[0] ?? null
     setSellerForm((prev) => ({ ...prev, profilePicture: file }))
+  }
+
+  const handleBuyerFormChange = (field) => (event) => {
+    setBuyerForm((prev) => ({ ...prev, [field]: event.target.value }))
+  }
+
+  const handleBuyerPictureChange = (event) => {
+    const file = event.target.files?.[0] ?? null
+    setBuyerForm((prev) => ({ ...prev, profilePicture: file }))
+  }
+
+  const handleToggleEditBuyer = () => {
+    if (isEditingBuyer) {
+      setIsEditingBuyer(false)
+      setBuyerSaveMessage('')
+      return
+    }
+    fillBuyerForm(profile, user)
+    setBuyerSaveMessage('')
+    setIsEditingBuyer(true)
+  }
+
+  const handleBuyerSave = async (event) => {
+    event.preventDefault()
+    if (!onUpdateBuyerProfile) return
+    setIsSavingBuyer(true)
+    setBuyerSaveMessage('')
+    try {
+      await onUpdateBuyerProfile({
+        name: buyerForm.name.trim(),
+        profilePicture: buyerForm.profilePicture,
+      })
+      setBuyerSaveMessage('Buyer profile updated.')
+      setIsEditingBuyer(false)
+    } catch (error) {
+      setBuyerSaveMessage(error.message || 'Unable to update buyer profile.')
+    } finally {
+      setIsSavingBuyer(false)
+    }
   }
 
   const handleAddSkill = (event) => {
@@ -342,6 +416,16 @@ function UserProfileView({
                 Become a seller
               </Button>
             ) : null}
+            {!isSellerMode && (
+              <Button
+                type="button"
+                variant="outline"
+                className="px-5 text-slate-700"
+                onClick={handleToggleEditBuyer}
+              >
+                {isEditingBuyer ? 'Cancel edit' : 'Edit buyer info'}
+              </Button>
+            )}
             {isSellerMode && (
               <Button
                 type="button"
@@ -383,6 +467,66 @@ function UserProfileView({
                   </div>
                 </div>
               </div>
+            )}
+
+            {!isSellerMode && isEditingBuyer && (
+              <form
+                className="space-y-5 rounded-2xl border border-purple-100 bg-purple-50/50 px-6 py-6 shadow-sm"
+                onSubmit={handleBuyerSave}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Buyer info</p>
+                    <p className="text-sm text-slate-600">Update your private buyer profile details.</p>
+                  </div>
+                  <Button
+                    type="submit"
+                    className="bg-purple-600 text-white hover:bg-purple-500"
+                    disabled={isSavingBuyer}
+                  >
+                    {isSavingBuyer ? 'Saving...' : 'Save changes'}
+                  </Button>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profile picture</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    {selectedBuyerPicturePreviewUrl || buyerForm.profilePictureUrl ? (
+                      <img
+                        src={selectedBuyerPicturePreviewUrl || buyerForm.profilePictureUrl}
+                        alt={buyerForm.name || name}
+                        className="h-16 w-16 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-100 text-sm font-semibold text-slate-500">
+                        {initials}
+                      </div>
+                    )}
+                    <div className="flex-1 space-y-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-purple-600 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-purple-500"
+                        onChange={handleBuyerPictureChange}
+                      />
+                      {buyerForm.profilePicture && (
+                        <p className="text-xs text-slate-600">Selected: {buyerForm.profilePicture.name}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                  placeholder="Full name"
+                  value={buyerForm.name}
+                  onChange={handleBuyerFormChange('name')}
+                  required
+                />
+                <TimedAlert
+                  key={`user-profile-buyer-save-${buyerSaveMessage || 'empty'}`}
+                  message={buyerSaveMessage}
+                  tone="info"
+                />
+              </form>
             )}
 
             {isSellerMode && isEditingSeller && (
@@ -814,7 +958,7 @@ function UserProfileView({
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-4 xl:grid-cols-3">
+              <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)]">
                 <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-slate-900">Recent orders</p>
@@ -833,16 +977,20 @@ function UserProfileView({
                           key={order._id || order.id}
                           className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-3"
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">{order.gigTitle}</p>
-                              <p className="text-xs text-slate-500">Gig ID: {order.gigId}</p>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="break-words text-sm font-semibold text-slate-900">
+                                {order.gigTitle}
+                              </p>
+                              <p className="mt-1 break-all text-xs leading-5 text-slate-500">
+                                Gig ID: {order.gigId}
+                              </p>
                             </div>
-                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold capitalize text-slate-700">
+                            <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold capitalize text-slate-700">
                               {status.replace('_', ' ')}
                             </span>
                           </div>
-                          <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
                             <span>{formatter.format(Number(order.price) || 0)}</span>
                             <span>{order.updatedAt ? timeAgo(order.updatedAt) : ''}</span>
                           </div>
@@ -853,7 +1001,7 @@ function UserProfileView({
                   <Button
                     type="button"
                     variant="outline"
-                    className="mt-3 border-purple-200 text-purple-700 hover:bg-purple-50"
+                    className="mt-3 w-full border-purple-200 text-purple-700 hover:bg-purple-50"
                     onClick={onOpenBuyerOrders}
                   >
                     Open all orders
@@ -877,11 +1025,15 @@ function UserProfileView({
                         className="flex flex-col rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-3"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{gig.title}</p>
-                            <p className="text-xs text-slate-500">{gig.category || 'General'}</p>
+                          <div className="min-w-0 flex-1">
+                            <p className="break-words text-sm font-semibold text-slate-900">
+                              {gig.title}
+                            </p>
+                            <p className="break-words text-xs text-slate-500">
+                              {gig.category || 'General'}
+                            </p>
                           </div>
-                          <span className="text-xs font-semibold text-slate-700">
+                          <span className="shrink-0 text-xs font-semibold text-slate-700">
                             {gig.price ? formatter.format(gig.price) : 'Ask for quote'}
                           </span>
                         </div>
@@ -917,16 +1069,16 @@ function UserProfileView({
                     {savedSellers.map((seller) => (
                       <div
                         key={seller.id}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-3"
+                        className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-3"
                       >
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-slate-900">{seller.name}</p>
-                          <p className="text-xs text-slate-500">{seller.headline}</p>
+                          <p className="break-words text-xs text-slate-500">{seller.headline}</p>
                         </div>
                         <Button
                           type="button"
                           variant="outline"
-                          className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                          className="shrink-0 border-purple-200 text-purple-700 hover:bg-purple-50"
                           onClick={() => onOpenSellerProfile?.(seller.id, seller.name)}
                         >
                           View profile

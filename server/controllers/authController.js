@@ -117,6 +117,28 @@ export const me = async (req, res) => {
   return res.json({ user })
 }
 
+export const updateMe = async (req, res) => {
+  const user = await User.findById(req.user.id)
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' })
+  }
+
+  if (typeof req.body?.name === 'string') {
+    const trimmedName = req.body.name.trim()
+    if (!trimmedName) {
+      return res.status(400).json({ message: 'Name is required' })
+    }
+    user.name = trimmedName
+  }
+
+  if (typeof req.body?.avatarUrl === 'string') {
+    user.avatarUrl = req.body.avatarUrl.trim()
+  }
+
+  await user.save()
+  return res.json({ user: sanitizeUser(user) })
+}
+
 export const refreshSession = async (req, res) => {
   const refreshToken = req.refreshToken
   const user = await User.findById(refreshToken.user)

@@ -891,7 +891,8 @@ function App() {
       setDataError('')
       try {
         const params = new URLSearchParams()
-        if (gigFilters.search) params.set('search', gigFilters.search)
+        const trimmedSearch = String(gigFilters.search || '').trim()
+        if (trimmedSearch) params.set('search', trimmedSearch)
         if (gigFilters.category) params.set('category', gigFilters.category)
         if (gigFilters.minPrice) params.set('minPrice', gigFilters.minPrice)
         if (gigFilters.maxPrice) params.set('maxPrice', gigFilters.maxPrice)
@@ -1525,6 +1526,55 @@ function App() {
     }
   }
 
+  const handleUpdateBuyerProfile = async (updates) => {
+    if (!user || !authToken) {
+      setMessage('Please sign in to update your buyer profile.')
+      return
+    }
+    try {
+      const payload = { ...updates }
+      if (updates?.profilePicture) {
+        const formData = new FormData()
+        formData.append('file', updates.profilePicture)
+        const upload = await authedFetch('/api/uploads/image', {
+          method: 'POST',
+          body: formData,
+        })
+        if (upload?.url) {
+          payload.avatarUrl = upload.url
+        }
+      }
+      delete payload.profilePicture
+
+      const data = await authedFetch('/api/auth/me', {
+        method: 'PUT',
+        body: payload,
+      })
+      if (data?.user) {
+        const nextUser = mapUserFromApi(data.user)
+        const currentUserId = user?._id || user?.id || ''
+        setUser(nextUser)
+        if (currentUserId) {
+          setSellerProfiles((prev) =>
+            prev.map((profile) =>
+              profile.userId === currentUserId
+                ? {
+                    ...profile,
+                    avatar: nextUser.avatarUrl || profile.avatar,
+                    heroImage: nextUser.avatarUrl || profile.heroImage,
+                  }
+                : profile,
+            ),
+          )
+        }
+      }
+      setMessage('Buyer profile updated.')
+    } catch (error) {
+      setMessage(error.message || 'Unable to update buyer profile.')
+      throw error
+    }
+  }
+
   const handleCategorySelect = (label) => {
     setActiveCategory(label)
     setGigFilters((prev) => ({ ...prev, category: label, page: 1 }))
@@ -1690,17 +1740,42 @@ function App() {
     setGigFilters((prev) => ({ ...prev, [field]: value, page: field === 'page' ? value : 1 }))
   }
 
+  const syncGigSearchRoute = useCallback(
+    (value) => {
+      const trimmed = String(value || '').trim()
+      if (trimmed) {
+        const params = new URLSearchParams()
+        params.set('search', trimmed)
+        const nextRoute = `/search?${params.toString()}`
+        const currentRoute = `${location.pathname}${location.search || ''}`
+        if (currentRoute !== nextRoute) {
+          navigate(nextRoute, { replace: true })
+        }
+        return
+      }
+      if (location.pathname === '/search' && location.search) {
+        navigate('/search', { replace: true })
+      }
+    },
+    [location.pathname, location.search, navigate],
+  )
+
+  const handleGigSearchChange = useCallback(
+    (value) => {
+      const nextSearch = String(value || '')
+      setGigFilters((prev) => {
+        if (prev.search === nextSearch) return prev
+        return { ...prev, search: nextSearch, page: 1 }
+      })
+      syncGigSearchRoute(nextSearch)
+    },
+    [syncGigSearchRoute],
+  )
+
   const handleGigSearchSubmit = (value) => {
-    const trimmed = String(value || '').trim()
-    setGigFilters((prev) => ({ ...prev, search: trimmed, page: 1 }))
-    if (trimmed) {
-      const params = new URLSearchParams()
-      params.set('search', trimmed)
-      navigate(`/search?${params.toString()}`, { replace: true })
-      return
-    }
-    if (location.pathname === '/search') {
-      navigate('/', { replace: true })
+    handleGigSearchChange(value)
+    if (!String(value || '').trim() && location.pathname === '/search' && location.search) {
+      navigate('/search', { replace: true })
     }
   }
 
@@ -3385,6 +3460,7 @@ const openSignupModal = () => {
             chattingGigStates={chattingGigStates}
             onToggleFavoriteGig={handleToggleFavoriteGig}
             onGigFilterChange={handleGigFilterChange}
+            onSearchChange={handleGigSearchChange}
             onSearchSubmit={handleGigSearchSubmit}
             onClearGigFilters={handleClearGigFilters}
           />
@@ -3510,6 +3586,7 @@ const openSignupModal = () => {
             onOpenBuyerOrders={handleOpenBuyerOrders}
             onRefreshSellerProfile={handleRefreshMySellerProfile}
             onUpdateSellerProfile={handleUpdateSellerProfile}
+            onUpdateBuyerProfile={handleUpdateBuyerProfile}
             competencyLevels={competencyLevels}
             onOpenGigFromSaved={handleOpenGigDetail}
             onOpenSellerProfile={handleOpenSellerProfile}
