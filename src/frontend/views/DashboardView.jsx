@@ -104,9 +104,9 @@ function DashboardView({
               </div>
 
               <div className="flex w-full max-w-2xl flex-col gap-3">
-                <div className="flex items-center gap-3 rounded-full bg-white/95 px-4 py-3 shadow-lg shadow-slate-950/20 backdrop-blur">
+                <div className="flex items-center gap-2 rounded-2xl bg-white/95 px-3 py-2 shadow-lg shadow-slate-950/20 backdrop-blur sm:gap-3 sm:rounded-full sm:px-4 sm:py-3">
                   <input
-                    className="w-full bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none sm:text-base"
+                    className="min-w-0 w-full bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none sm:text-base"
                     placeholder="Search for any service..."
                     value={searchInput}
                     onChange={(event) => setSearchInput(event.target.value)}
@@ -119,7 +119,7 @@ function DashboardView({
                   />
                   <Button
                     type="button"
-                    className="h-11 w-11 rounded-full bg-slate-900 text-white hover:bg-slate-800"
+                    className="h-10 w-10 shrink-0 rounded-full bg-slate-900 text-white hover:bg-slate-800 sm:h-11 sm:w-11"
                     onClick={handleSearchSubmit}
                     aria-label="Search"
                   >
@@ -144,13 +144,13 @@ function DashboardView({
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Categories
               </p>
-              <h2 className="text-2xl font-semibold text-slate-900">Browse by category</h2>
+              <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">Browse by category</h2>
             </div>
             <button
               type="button"
@@ -178,13 +178,13 @@ function DashboardView({
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">All gigs</p>
-              <h2 className="text-2xl font-semibold text-slate-900">Fresh listings</h2>
+              <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">Fresh listings</h2>
             </div>
-            <div className="flex items-center gap-2 text-sm text-slate-500">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
               <span>{totalGigs} live gigs</span>
               <div className="flex items-center gap-2">
                 <button

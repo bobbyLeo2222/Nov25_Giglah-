@@ -60,7 +60,7 @@ function SellerAnalyticsView({
   const response = analytics?.response || {}
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-8">
       <div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Seller analytics</p>

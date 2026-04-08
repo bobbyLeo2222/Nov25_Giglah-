@@ -245,7 +245,7 @@ function SellerOrdersView({
           <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
             {isBuyerMode ? 'Buyer orders' : 'Seller orders'}
           </p>
-          <h2 className="mt-2 text-3xl font-semibold text-slate-900 sm:text-4xl">
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900 sm:text-4xl">
             {isBuyerMode ? 'My Orders' : 'Orders'}
           </h2>
           <p className="mt-2 text-sm text-slate-600">
@@ -253,7 +253,7 @@ function SellerOrdersView({
               ? 'Track progress, request completion, and respond to seller confirmations.'
               : 'Track status across all incoming and outgoing orders.'}
           </p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-4">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4">
               <p className="text-xs font-semibold text-slate-500">All</p>
               <p className="mt-2 text-2xl font-semibold text-slate-900">{allOrders.length}</p>
@@ -349,10 +349,10 @@ function SellerOrdersView({
 	                return (
 	                  <div className="space-y-5">
 	                    <div className="rounded-[28px] border border-slate-200 bg-white">
-	                      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-5 py-5">
+	                      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5 sm:py-5">
 	                        <div>
 	                          <div className="flex flex-wrap items-center gap-2">
-	                            <p className="text-2xl font-semibold text-slate-900">
+	                            <p className="text-xl font-semibold text-slate-900 sm:text-2xl">
 	                              Order {formatOrderReference(order)}
 	                            </p>
 	                            <button
@@ -374,19 +374,20 @@ function SellerOrdersView({
 	                            {formatOrderDate(order.createdAt)}
 	                          </p>
 	                        </div>
-	                        <div className="text-right">
-	                          <p className="text-4xl font-semibold text-slate-900">{formatter.format(order.price || 0)}</p>
+	                        <div className="text-left sm:text-right">
+	                          <p className="text-2xl font-semibold text-slate-900 sm:text-4xl">{formatter.format(order.price || 0)}</p>
 	                          <span className="mt-2 inline-flex rounded-full bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
 	                            Custom Order
 	                          </span>
 	                        </div>
 	                      </div>
 
-	                      <div className="border-b border-slate-200 px-5 py-4 text-sm text-slate-700">
+	                      <div className="border-b border-slate-200 px-4 py-4 text-sm text-slate-700 sm:px-5">
 	                        {order.notes || order.gigTitle}
 	                      </div>
 
-	                      <div className="overflow-hidden px-5 py-4">
+	                      <div className="overflow-x-auto px-4 py-4 sm:px-5">
+                          <div className="min-w-[520px]">
 	                        <div className="grid grid-cols-[minmax(0,1fr)_80px_110px_110px] items-center gap-3 border-b border-slate-200 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
 	                          <span>Item</span>
 	                          <span className="text-right">Quantity</span>
@@ -407,11 +408,12 @@ function SellerOrdersView({
 	                            </div>
 	                          </div>
 	                        </div>
+                          </div>
 	                      </div>
 	                    </div>
 
-	                    {order.notes ? (
-	                      <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-6 text-center shadow-sm">
+		                    {order.notes ? (
+		                      <div className="rounded-[28px] border border-slate-200 bg-white px-4 py-5 text-center shadow-sm sm:px-6 sm:py-6">
 	                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-600">
 	                          Order Requirements
 	                        </p>
@@ -523,7 +525,7 @@ function SellerOrdersView({
                       )}
                     </div>
 
-	                    <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-6 text-center shadow-sm">
+	                    <div className="rounded-[28px] border border-slate-200 bg-white px-4 py-5 text-center shadow-sm sm:px-6 sm:py-6">
 	                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-600">
 	                        Order Started
 	                      </p>

@@ -25,7 +25,7 @@ function SellerGigCreateView({
   onCancelEditGig,
 }) {
   return (
-    <section id="create-gig" className="w-full rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
+    <section id="create-gig" className="w-full rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-50 text-purple-600">
           <svg
@@ -40,7 +40,7 @@ function SellerGigCreateView({
           </svg>
         </div>
         <div className="flex-1">
-          <h2 className="text-2xl font-semibold text-slate-900">
+          <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">
             {isEditingGig ? 'Edit Gig' : 'Create a Gig'}
           </h2>
           <p className="text-sm text-slate-500">
@@ -252,7 +252,7 @@ function SellerGigCreateView({
               )}
             </div>
             <div className="flex flex-wrap gap-3">
-              <Button type="submit" className="flex-1 bg-purple-600 text-white hover:bg-purple-500">
+              <Button type="submit" className="w-full bg-purple-600 text-white hover:bg-purple-500 sm:flex-1">
                 {isEditingGig ? 'Save changes' : 'Submit gig'}
               </Button>
               {isEditingGig && (

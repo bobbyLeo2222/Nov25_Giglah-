@@ -151,18 +151,18 @@ function SellerDashboardView({
         <div className="space-y-8">
           <section
             id="seller-dashboard"
-            className="-mx-4 rounded-[36px] border border-slate-200 bg-white p-10 shadow-lg sm:-mx-8 sm:p-12 lg:-mx-12"
+            className="rounded-3xl border border-slate-200 bg-white p-4 shadow-lg sm:-mx-4 sm:rounded-[36px] sm:p-10 lg:-mx-8 lg:p-12"
           >
-            <div className="rounded-[28px] border border-purple-100 bg-gradient-to-br from-purple-50 via-white to-amber-50 px-6 py-6 shadow-sm sm:px-8 sm:py-7">
+            <div className="rounded-[28px] border border-purple-100 bg-gradient-to-br from-purple-50 via-white to-amber-50 px-4 py-5 shadow-sm sm:px-8 sm:py-7">
               <div>
                 <div>
-                  <h2 className="mt-2 text-4xl font-semibold text-slate-900 sm:text-5xl">Dashboard</h2>
+                  <h2 className="mt-2 text-3xl font-semibold text-slate-900 sm:text-5xl">Dashboard</h2>
                   <p className="mt-2 text-base text-slate-600 sm:text-lg">
                     Seller summary at a glance.
                   </p>
                 </div>
               </div>
-              <div className="mt-6 grid gap-4 sm:grid-cols-4">
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4">
                   <p className="text-xs font-semibold text-slate-500">Live gigs</p>
                   <p className="mt-2 text-3xl font-semibold text-slate-900">{myGigs.length}</p>

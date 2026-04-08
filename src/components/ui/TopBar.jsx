@@ -137,7 +137,7 @@ function TopBar({
             onClick={onDashboard}
             className="flex items-center rounded-xl transition hover:opacity-90"
           >
-            <img src={logo} alt="GigLah! logo" className="h-16 w-auto sm:h-20 md:h-24" />
+            <img src={logo} alt="GigLah! logo" className="h-12 w-auto sm:h-20 md:h-24" />
           </button>
         </div>
         {user ? (
@@ -275,7 +275,7 @@ function TopBar({
                         </span>
                       )}
                     </span>
-                    <span>{userLabel}</span>
+                    <span className="max-w-[42vw] truncate sm:max-w-[220px]">{userLabel}</span>
                     <span
                       className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[13px] font-bold transition ${
                         isAccountMenuOpen ? 'rotate-180' : ''
@@ -332,7 +332,7 @@ function TopBar({
                         </span>
                       )}
                     </span>
-                    <span>{userLabel}</span>
+                    <span className="max-w-[42vw] truncate sm:max-w-[220px]">{userLabel}</span>
                     <span
                       className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[13px] font-bold transition ${
                         isAccountMenuOpen ? 'rotate-180' : ''

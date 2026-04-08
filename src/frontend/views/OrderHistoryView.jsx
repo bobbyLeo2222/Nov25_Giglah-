@@ -234,7 +234,7 @@ function OrderHistoryView({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Gig history</p>
-            <h2 className="mt-2 text-3xl font-semibold text-slate-900">{order.gigTitle}</h2>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900 sm:text-3xl">{order.gigTitle}</h2>
             <p className="mt-2 text-sm text-slate-600">
               Buyer: <span className="font-semibold text-slate-800">{buyerLabel}</span> · Seller:{' '}
               <span className="font-semibold text-slate-800">{sellerLabel}</span>

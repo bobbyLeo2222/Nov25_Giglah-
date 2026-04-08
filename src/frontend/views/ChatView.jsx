@@ -230,7 +230,11 @@ function ChatView({
   return (
     <section className="h-full overflow-hidden bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)] lg:rounded-none">
       <div className="grid h-full min-h-0 lg:grid-cols-[380px_1fr] xl:grid-cols-[410px_1fr]">
-        <aside className="flex min-h-0 flex-col border-b border-slate-200 bg-slate-50/80 lg:border-b-0 lg:border-r">
+        <aside
+          className={`min-h-0 flex-col border-b border-slate-200 bg-slate-50/80 lg:border-b-0 lg:border-r ${
+            selectedThread ? 'hidden lg:flex' : 'flex'
+          }`}
+        >
           <div className="border-b border-slate-200 bg-white px-5 py-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -351,12 +355,20 @@ function ChatView({
           </div>
         </aside>
 
-        <div className="flex min-h-0 flex-col bg-white">
+        <div className={`min-h-0 flex-col bg-white ${selectedThread ? 'flex' : 'hidden lg:flex'}`}>
           {selectedThread ? (
             <>
               <header className="border-b border-slate-200 bg-white px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:border-purple-200 hover:text-purple-700 lg:hidden"
+                      onClick={() => onSelectThread?.('')}
+                      aria-label="Back to conversations"
+                    >
+                      ←
+                    </button>
                     <Avatar
                       name={selectedCounterpart.name}
                       src={selectedCounterpart.avatar}

@@ -15,7 +15,7 @@ function UserProfileView({
   ratingSummary,
   formatter,
   timeAgo,
-  buyerBrief,
+  buyerBrief: _buyerBrief,
   buyerBriefs = [],
   favoriteGigIds = [],
   favoriteSellerIds = [],
@@ -31,8 +31,8 @@ function UserProfileView({
   onUpdateBuyerProfile,
   onOpenGigFromSaved,
   onOpenSellerProfile,
-  onBuyerBriefChange,
-  onSubmitBuyerBrief,
+  onBuyerBriefChange: _onBuyerBriefChange,
+  onSubmitBuyerBrief: _onSubmitBuyerBrief,
   profileWorkspace = 'auto',
 }) {
   const [isEditingBuyer, setIsEditingBuyer] = useState(false)
@@ -403,7 +403,7 @@ function UserProfileView({
                 Seller Private Profile
               </p>
             )}
-            <h2 className="text-3xl font-semibold text-slate-900">{name}</h2>
+            <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">{name}</h2>
             {isSellerMode && headline && <p className="text-base text-slate-600">{headline}</p>}
             {isSellerMode && profile?.location && (
               <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
@@ -609,8 +609,9 @@ function UserProfileView({
                 />
                 <div className="grid gap-3 md:grid-cols-2">
                   <input
+                    type="tel"
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                    placeholder="Phone number"
+                    placeholder="WhatsApp number (optional)"
                     value={sellerForm.phone}
                     onChange={handleSellerFormChange('phone')}
                   />
@@ -816,7 +817,7 @@ function UserProfileView({
                     <p className="mt-1 text-sm font-semibold text-slate-900">{previewCountry || 'Not set'}</p>
                   </div>
                   <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                    <p className="text-xs font-semibold text-slate-500">Phone</p>
+                    <p className="text-xs font-semibold text-slate-500">WhatsApp</p>
                     <p className="mt-1 text-sm font-semibold text-slate-900">{sellerPhone || 'Not set'}</p>
                   </div>
                   <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">

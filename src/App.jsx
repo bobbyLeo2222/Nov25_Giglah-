@@ -1928,6 +1928,16 @@ function App() {
     }
     try {
       const payload = { ...updates }
+      if (typeof payload.phone !== 'undefined') {
+        const phoneInput = String(payload.phone || '').trim()
+        const normalizedPhone = phoneInput ? normalizePhoneNumber(phoneInput) : ''
+        if (phoneInput && !normalizedPhone) {
+          throw new Error(
+            'Enter a valid WhatsApp number in international format (for example, +6591234567).',
+          )
+        }
+        payload.phone = normalizedPhone || ''
+      }
       if (updates?.profilePicture) {
         const formData = new FormData()
         formData.append('file', updates.profilePicture)
@@ -3851,9 +3861,9 @@ const openSignupModal = () => {
   const normalizePhoneNumber = (value) => {
     const raw = String(value || '').trim()
     if (!raw) return null
-    if (/^\+\d{7,15}$/.test(raw)) return raw
+    if (/^\+\d{8,15}$/.test(raw)) return raw
     const digits = raw.replace(/\D/g, '')
-    if (digits.length >= 7 && digits.length <= 15) return `+${digits}`
+    if (digits.length >= 8 && digits.length <= 15) return `+${digits}`
     return null
   }
 
@@ -3864,8 +3874,8 @@ const openSignupModal = () => {
       return
     }
     const { fullName, displayName, description, phone, skills, languages } = sellerForm
-    if (!fullName || !displayName || !description || !phone || !sellerForm.country) {
-      setSellerError('Complete your name, display details, description, phone number, and country.')
+    if (!fullName || !displayName || !description || !sellerForm.country) {
+      setSellerError('Complete your name, display details, description, and country.')
       return
     }
     const selectedCountry =
@@ -3874,9 +3884,10 @@ const openSignupModal = () => {
       setSellerError('Enter a country when selecting Others.')
       return
     }
-    const normalizedPhone = normalizePhoneNumber(phone)
-    if (!normalizedPhone) {
-      setSellerError('Enter a valid phone number in international format (for example, +6591234567).')
+    const phoneInput = String(phone || '').trim()
+    const normalizedPhone = phoneInput ? normalizePhoneNumber(phoneInput) : ''
+    if (phoneInput && !normalizedPhone) {
+      setSellerError('Enter a valid WhatsApp number in international format (for example, +6591234567).')
       return
     }
     if (skills.length === 0) {
@@ -3899,7 +3910,7 @@ const openSignupModal = () => {
       websiteUrl: sellerForm.website.trim(),
       instagramUrl: sellerForm.instagram.trim(),
       otherSocialUrl: sellerForm.otherSocial.trim(),
-      phone: normalizedPhone,
+      phone: normalizedPhone || '',
       location: selectedCountry,
     }
     await runWithActionCooldown(
@@ -4101,7 +4112,7 @@ const openSignupModal = () => {
   return (
     <div
       className={`bg-white text-slate-900 antialiased overflow-x-hidden ${
-        view === 'chat' ? 'flex h-screen flex-col overflow-hidden' : 'min-h-screen'
+        view === 'chat' ? 'flex h-[100dvh] flex-col overflow-hidden' : 'min-h-screen'
       }`}
     >
       <TopBar
@@ -4514,13 +4525,13 @@ const openSignupModal = () => {
         )}
 
         {view === 'categories' && (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
                   Categories
                 </p>
-                <h2 className="text-2xl font-semibold text-slate-900">Browse gigs by category</h2>
+                <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">Browse gigs by category</h2>
                 <p className="text-sm text-slate-600">
                   Tap a category below to focus. All marketplace categories are listed here.
                 </p>
@@ -4596,13 +4607,13 @@ const openSignupModal = () => {
         )}
 
         {view === 'privacy' && (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
                   Privacy Policy
                 </p>
-                <h2 className="text-2xl font-semibold text-slate-900">How GigLah! handles data</h2>
+                <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">How GigLah! handles data</h2>
                 <p className="text-sm text-slate-600">
                   This Privacy Policy is guided by Singapore&apos;s Personal Data Protection Act (PDPA).
                 </p>
@@ -4630,13 +4641,13 @@ const openSignupModal = () => {
         )}
 
         {view === 'terms' && (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
                   Terms of Use
                 </p>
-                <h2 className="text-2xl font-semibold text-slate-900">Please read before using GigLah!</h2>
+                <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">Please read before using GigLah!</h2>
                 <p className="text-sm text-slate-600">
                   We operate solely as a listing marketplace for freelance gigs and adhere to the laws of Singapore.
                 </p>
@@ -4658,10 +4669,10 @@ const openSignupModal = () => {
         )}
 
         {view === 'verify-email' && (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Verify email</p>
-              <h2 className="text-2xl font-semibold text-slate-900">Verify your email</h2>
+              <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">Verify your email</h2>
               <p className="text-sm text-slate-600">
                 Enter the 6-digit code from your inbox to activate your account.
               </p>
@@ -4702,10 +4713,10 @@ const openSignupModal = () => {
         )}
 
         {view === 'reset-password' && (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Reset password</p>
-              <h2 className="text-2xl font-semibold text-slate-900">Reset password</h2>
+              <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">Reset password</h2>
               <p className="text-sm text-slate-600">
                 Use the link we emailed you to reset your account password.
               </p>

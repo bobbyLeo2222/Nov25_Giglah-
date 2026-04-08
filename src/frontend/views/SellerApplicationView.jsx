@@ -34,13 +34,13 @@ function SellerApplicationView({
   )
 
   return (
-    <section className="w-full rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
+    <section className="w-full rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
             {isSellerMode ? 'Seller profile' : 'Become a seller'}
           </p>
-          <h2 className="text-2xl font-semibold text-slate-900">
+          <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">
             {isSellerMode ? 'Update your profile' : 'Complete your profile'}
           </h2>
           <p className="text-sm text-slate-500">
@@ -198,7 +198,7 @@ function SellerApplicationView({
           />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">Phone Number</label>
+          <label className="text-sm font-semibold text-slate-700">WhatsApp Number (Optional)</label>
           <input
             type="tel"
             className={sellerInputClasses}
@@ -206,6 +206,9 @@ function SellerApplicationView({
             value={sellerForm.phone}
             onChange={onSellerFormChange('phone')}
           />
+          <p className="text-xs text-slate-500">
+            This is the number buyers can use to message you on WhatsApp.
+          </p>
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-slate-700">Country</label>
@@ -244,7 +247,7 @@ function SellerApplicationView({
           />
           <button
             type="button"
-            className="h-11 rounded-full bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-500"
+            className="h-11 w-full rounded-full bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-500 sm:w-auto"
             onClick={onAddSkill}
           >
             Add Skill
@@ -300,7 +303,7 @@ function SellerApplicationView({
           </div>
           <button
             type="button"
-            className="h-11 rounded-full bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-500"
+            className="h-11 w-full rounded-full bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-500 sm:w-auto"
             onClick={onAddLanguage}
           >
             Add Language

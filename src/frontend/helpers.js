@@ -50,6 +50,23 @@ const normalizeGigMedia = (media = []) => {
     .filter(Boolean)
 }
 
+const normalizeWhatsAppPhone = (value = '') => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  let normalized = raw.replace(/[^\d+]/g, '')
+  if (normalized.startsWith('+')) normalized = normalized.slice(1)
+  normalized = normalized.replace(/\D/g, '')
+  if (normalized.startsWith('00')) normalized = normalized.slice(2)
+  return normalized.length >= 8 ? normalized : ''
+}
+
+const buildWhatsAppUrl = ({ phone = '', sellerName = 'Seller', gigTitle = '' } = {}) => {
+  const normalizedPhone = normalizeWhatsAppPhone(phone)
+  if (!normalizedPhone) return ''
+  const message = `Hi ${sellerName}, I'm interested in your gig "${gigTitle}" on GigLah.`
+  return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`
+}
+
 const normalizeGig = (gig) => {
   const rawSeller = gig.seller
   let sellerUserId = ''
@@ -62,12 +79,22 @@ const normalizeGig = (gig) => {
     sellerUserId = /^[a-f0-9]{24}$/i.test(maybe) ? maybe : ''
   }
 
+  const sellerPhone = gig.sellerPhone || gig.sellerProfile?.phone || ''
+  const sellerName = gig.sellerName || gig.seller || 'Seller'
+  const whatsappUrl = buildWhatsAppUrl({
+    phone: sellerPhone,
+    sellerName,
+    gigTitle: gig.title || 'your gig',
+  })
+
   return {
     id: gig._id || gig.id,
     title: gig.title,
-    seller: gig.sellerName || gig.seller || 'Seller',
+    seller: sellerName,
     sellerUserId,
     sellerId: gig.sellerId || gig.sellerProfile?.sellerId || gig.sellerProfile?._id || '',
+    sellerPhone,
+    whatsappUrl,
     category: gig.category || '',
     packages: Array.isArray(gig.packages)
       ? gig.packages.map((pkg) => ({

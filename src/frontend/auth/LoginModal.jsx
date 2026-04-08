@@ -17,8 +17,8 @@ function LoginModal({
   onGoogleSignIn,
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 backdrop-blur-sm">
-      <div className="relative w-full max-w-md rounded-[32px] border border-slate-100 bg-white px-8 py-10 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 px-4 backdrop-blur-sm">
+      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[32px] border border-slate-100 bg-white px-5 py-8 shadow-2xl sm:px-8 sm:py-10">
         <button
           type="button"
           onClick={onClose}

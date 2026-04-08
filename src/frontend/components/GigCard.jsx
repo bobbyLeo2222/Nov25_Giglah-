@@ -1,5 +1,5 @@
 import { gigAccentClasses } from '@/data/static'
-import { ChatBubbleIcon, GlobeIcon, InstagramIcon } from '@/frontend/components/icons'
+import { ChatBubbleIcon, GlobeIcon, InstagramIcon, WhatsAppIcon } from '@/frontend/components/icons'
 
 function GigCard({
   gig,
@@ -23,6 +23,8 @@ function GigCard({
   const isPreviewable = Boolean(onPreviewImage && primaryImage)
   const canSaveGig = showBuyerActions && typeof onToggleFavorite === 'function'
   const canChatSeller = showBuyerActions && typeof onOpenChat === 'function'
+  const showWhatsAppAction = showBuyerActions
+  const canWhatsAppSeller = Boolean(gig.whatsappUrl)
   const handlePreviewKey = (event) => {
     if (!isPreviewable) return
     if (event.key === 'Enter' || event.key === ' ') {
@@ -83,10 +85,10 @@ function GigCard({
       </div>
       <div className="flex flex-1 flex-col gap-3 px-4 py-4">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">{gig.title}</h3>
+          <h3 className="break-words text-lg font-semibold leading-snug text-slate-900">{gig.title}</h3>
           <button
             type="button"
-            className="text-xs font-semibold text-slate-600 underline decoration-slate-300 decoration-2 underline-offset-[6px] transition hover:text-purple-700 hover:decoration-purple-400"
+            className="break-words text-left text-xs font-semibold text-slate-600 underline decoration-slate-300 decoration-2 underline-offset-[6px] transition hover:text-purple-700 hover:decoration-purple-400"
             onClick={() =>
               onOpenSellerProfile?.(gig.sellerId || gig.owner || '', gig.seller)
             }
@@ -137,6 +139,29 @@ function GigCard({
                 <InstagramIcon className="h-4 w-4" />
               </a>
             )}
+            {showWhatsAppAction &&
+              (canWhatsAppSeller ? (
+                <a
+                  href={gig.whatsappUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 text-emerald-600 transition hover:border-emerald-300 hover:text-emerald-700"
+                  aria-label={`Message ${gig.seller} on WhatsApp`}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <WhatsAppIcon className="h-4 w-4" />
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-full border border-slate-200 text-slate-300"
+                  aria-label={`${gig.seller} has not added a WhatsApp number`}
+                  title="Seller has not added a WhatsApp number"
+                >
+                  <WhatsAppIcon className="h-4 w-4" />
+                </button>
+              ))}
             {canChatSeller && (
               <button
                 type="button"

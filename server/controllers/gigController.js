@@ -8,6 +8,19 @@ const GIG_IMAGE_LIMIT = 10
 const GIG_VIDEO_LIMIT = 3
 
 const maybeNormalizeUrl = (value) => (value === undefined ? undefined : normalizeUrl(value))
+const withSellerProfilePhone = (query) => query.populate('sellerProfile', 'phone')
+
+const mapGigForResponse = (gig) => {
+  const serialized = gig?.toObject ? gig.toObject() : gig
+  if (!serialized) return serialized
+  const sellerProfile = serialized.sellerProfile
+  const sellerPhone =
+    sellerProfile && typeof sellerProfile === 'object' ? sellerProfile.phone || '' : ''
+  return {
+    ...serialized,
+    sellerPhone,
+  }
+}
 
 const inferMediaType = (url = '', declaredType = '') => {
   if (declaredType === 'video' || declaredType === 'image') return declaredType
@@ -118,19 +131,22 @@ export const getGigs = asyncHandler(async (req, res) => {
   const sortOption = sortMap[sort] || sortMap.newest
 
   const [gigs, total] = await Promise.all([
-    Gig.find(query).sort(sortOption).skip((page - 1) * pageSize).limit(pageSize),
+    withSellerProfilePhone(Gig.find(query))
+      .sort(sortOption)
+      .skip((page - 1) * pageSize)
+      .limit(pageSize),
     Gig.countDocuments(query),
   ])
 
-  res.json({ gigs, total, page, pageSize })
+  res.json({ gigs: gigs.map(mapGigForResponse), total, page, pageSize })
 })
 
 export const getGig = asyncHandler(async (req, res) => {
-  const gig = await Gig.findById(req.params.id)
+  const gig = await withSellerProfilePhone(Gig.findById(req.params.id))
   if (!gig) {
     return res.status(404).json({ message: 'Gig not found' })
   }
-  return res.json({ gig })
+  return res.json({ gig: mapGigForResponse(gig) })
 })
 
 export const createGig = asyncHandler(async (req, res) => {
