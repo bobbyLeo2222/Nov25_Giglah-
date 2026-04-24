@@ -32,3 +32,4 @@ Frontend API config:
 - If you host API + frontend on the same DigitalOcean app, leave `VITE_API_BASE` unset so the frontend uses the current site origin.
 
 If you use the email / Cloudinary / Google features, also set the corresponding variables from `server/.env` in DigitalOcean (do not commit secrets).
+# Giglah_May2026
